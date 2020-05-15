@@ -1,0 +1,6 @@
+[submodule "normalizing_flows"]
+	path = normalizing_flows
+	url = git@github.com:lliutianc/normalizing_flows.git
+[submodule "ffjord"]
+	path = ffjord
+	url = git@github.com:lliutianc/ffjord.git
