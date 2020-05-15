@@ -55,9 +55,9 @@ parser.add_argument('--beta2', type=float, default=0.999, help='Beta 2 in Adam.'
 parser.add_argument('--clr', action='store_true', help='Use cyclic LR in training.')
 parser.add_argument('--clr_size_up', type=int, default=2000, help='Size of up step in cyclic LR.')
 parser.add_argument('--clr_scale', type=int, default=3, help='Scale of base lr in cyclic LR.')
-parser.add_argument('--k', type=int, default=5, help='Update times of critic in each iterations.')
+parser.add_argument('--k', type=int, default=5, help='Update times of discriminator in each iterations.')
 parser.add_argument('--l', type=int, default=0.1, help='Coefficient for Gradient penalty.')
-parser.add_argument('--no_spectral_norm', action='store_true', help='Do not use spectral normalization in critic.')
+parser.add_argument('--no_spectral_norm', action='store_true', help='Do not use spectral normalization in discriminator.')
 parser.add_argument('--log_interval', type=int, default=100, help='How often to show loss statistics and save models/samples.')
 
 parser.add_argument('--auto', action='store_true', help='Using parameter searching to find the best result.')
@@ -129,7 +129,7 @@ class Generator(nn.Module):
             raise NotImplementedError('Check init_method')
 
 
-class Critic(nn.Module):
+class Discriminator(nn.Module):
     def __init__(self, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
                  spect_norm=True, batch_norm=False, res_block=False):
         super().__init__()
@@ -153,7 +153,7 @@ class Critic(nn.Module):
             else:
                 modules += [spectral_norm(nn.Linear(hidden_size, hidden_size)) if spect_norm else nn.Linear(hidden_size, hidden_size)]
             modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
-        modules += [activation, nn.Linear(hidden_size, 1)]
+        modules += [activation, nn.Linear(hidden_size, 1), nn.Sigmoid()]
         self.model = nn.Sequential(*modules)
         self.init_method = init_method
         self.model.apply(self.__init)
@@ -173,7 +173,7 @@ class Critic(nn.Module):
             raise NotImplementedError('Check init_method')
 
 
-class WGANTrainer(tune.Trainable):
+class GANTrainer(tune.Trainable):
     def _setup(self, config):
         self.config = config
         self.prior = torch.randn() if self.config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
@@ -184,7 +184,7 @@ class WGANTrainer(tune.Trainable):
                                    activation_slope=config['activation_slope'], init_method=config['init_method'],
                                    activation_fn=self.config['activation_fn'], batch_norm=self.config['batch_norm'],
                                    res_block=self.config['residual_block']).to(self.config['device'])
-        self.critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
+        self.discriminator = Discriminator(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
                              activation_slope=config['activation_slope'], init_method=config['init_method'],
                              activation_fn=self.config['activation_fn'], batch_norm=False, res_block=self.config['residual_block'],
                              spect_norm=self.config['spect_norm']).to(self.config['device'])
@@ -201,41 +201,44 @@ class WGANTrainer(tune.Trainable):
         self.optim_g = torch.optim.Adam([p for p in self.generator.parameters() if p.requires_grad],
                                         lr=config['lr'], betas=(config['beta1'], config['beta2']),
                                         weight_decay=config['weight_decay'])
-        self.optim_c = torch.optim.Adam([p for p in self.critic.parameters() if p.requires_grad],
+        self.optim_d = torch.optim.Adam([p for p in self.discriminator.parameters() if p.requires_grad],
                                         lr=config['lr'], betas=(config['beta1'], config['beta2']),
                                         weight_decay=config['weight_decay'])
         if self.config['clr']:
             self.sche_g = torch.optim.lr_scheduler.CyclicLR(self.optim_g, base_lr=config['lr'] / config['clr_scale'],
                                                             max_lr=config['lr'], step_size_up=config['clr_size_up'],
                                                             cycle_momentum=False)
-            self.sche_c = torch.optim.lr_scheduler.CyclicLR(self.optim_c, base_lr=config['lr'] / config['clr_scale'],
+            self.sche_d = torch.optim.lr_scheduler.CyclicLR(self.optim_d, base_lr=config['lr'] / config['clr_scale'],
                                                             max_lr=config['lr'], step_size_up=config['clr_size_up'],
                                                             cycle_momentum=False)
         else:
-            self.sche_g, self.sche_c = None, None
+            self.sche_g, self.sche_d = None, None
+
+        self.criterion = nn.BCELoss()
 
     def _train(self):
         self.generator.train()
-        self.critic.train()
-
+        self.discriminator.train()
+        real_label = torch.full((self.config['batch_size'], 1), 1., device=self.config['device'], requires_grad=False)
+        fake_label = torch.full((self.config['batch_size'], 1), 0., device=self.config['device'], requires_grad=False)
         start = time.time()
         for i in range(1, self.config["niters"] + 1):
             for k in range(self.config['k']):
                 real = self.dataloader.get_sample(self.config['batch_size'])
                 prior = self.prior(size=(self.config['batch_size'], self.config['prior_size']), device=self.config['device'])
                 fake = self.generator(prior)
-
-                loss_c = self.critic(fake.detach()).mean() - self.critic(real).mean()
-                loss_c += self.config["l"] * self._gradient_penalty(real, fake)
-                self.optim_c.zero_grad()
-                loss_c.backward()
-                self.optim_c.step()
-                if self.sche_c:
-                    self.sche_c.step()
+                loss_fake = self.criterion(self.discriminator(fake.detach()), fake_label)
+                loss_real = self.criterion(self.discriminator(real), real_label)
+                loss_d = loss_fake + loss_real
+                self.optim_d.zero_grad()
+                loss_d.backward()
+                self.optim_d.step()
+                if self.sche_d:
+                    self.sche_d.step()
 
             prior = self.prior(size=(self.config['batch_size'], self.config['prior_size']), device=self.config['device'])
             fake = self.generator(prior)
-            loss_g = - self.critic(fake).mean()
+            loss_g = self.criterion(self.discriminator(fake), real_label)
             self.optim_g.zero_grad()
             loss_g.backward()
             self.optim_g.step()
@@ -245,41 +248,52 @@ class WGANTrainer(tune.Trainable):
             if i % self.config['log_interval'] == 0 and not self.config['auto']:
                 cur_state_path = os.path.join(model_path, str(i))
                 torch.save(self.generator, cur_state_path + '_' + 'generator.pth')
-                torch.save(self.critic, cur_state_path + '_' + 'critic.pth')
+                torch.save(self.discriminator, cur_state_path + '_' + 'discriminator.pth')
 
-                w_distance_real, w_distance_est = self._evaluate(display=True, niter=i)
+                w_distance_real, bceloss_discriminator, bceloss_generator = self._evaluate(display=True, niter=i)
 
                 logger.info(f'Iter: {i} / {self.config["niters"]}, Time: {round(time.time() - start, 4)},  '
-                            f'w_distance_real: {w_distance_real}, w_distance_estimated: {w_distance_est}')
+                            f'w_distance_real: {w_distance_real}, '
+                            f'discriminator_loss: {bceloss_discriminator}, generator_loss: {bceloss_generator}')
 
                 start = time.time()
 
-        w_distance_real, w_distance_est = self._evaluate(display=False, niter=self.config['niters'])
-        return {'w_distance_estimated': w_distance_est,
+        w_distance_real, _, _ = self._evaluate(display=False, niter=self.config['niters'])
+        return {'w_distance_real': w_distance_real,
                 'train_epoch': 1}
 
     def _save(self, tmp_checkpoint_dir):
         generator_path = os.path.join(tmp_checkpoint_dir, 'generator.pth')
-        critic_path = os.path.join(tmp_checkpoint_dir, 'critic.pth')
+        critic_path = os.path.join(tmp_checkpoint_dir, 'discriminator.pth')
 
         torch.save(self.generator.state_dict(), generator_path)
-        torch.save(self.critic.state_dict(), critic_path)
+        torch.save(self.discriminator.state_dict(), critic_path)
         return tmp_checkpoint_dir
 
     def _restore(self, checkpoint_dir):
         generator_path = os.path.join(checkpoint_dir, 'generator.pth')
-        critic_path = os.path.join(checkpoint_dir, 'critic.pth')
+        critic_path = os.path.join(checkpoint_dir, 'discriminator.pth')
 
         self.generator.load_state_dict(torch.load(generator_path))
-        self.critic.load_state_dict(torch.load(critic_path))
+        self.discriminator.load_state_dict(torch.load(critic_path))
 
     def _evaluate(self, display, niter):
         with torch.no_grad():
+            real_label = torch.full((self.config['eval_size'], 1), 1., device=self.config['device'],
+                                    requires_grad=False)
+            fake_label = torch.full((self.config['eval_size'], 1), 0., device=self.config['device'],
+                                    requires_grad=False)
+
             real = self.dataloader.get_sample(self.config['eval_size'])
             prior = self.prior(size=(self.config['eval_size'], self.config['prior_size']), device=self.config['device'])
             fake = self.generator(prior)
+            loss_fake = self.criterion(self.discriminator(fake), fake_label)
+            loss_real = self.criterion(self.discriminator(real), real_label)
+            loss_d = loss_fake + loss_real
+            loss_g = self.criterion(self.discriminator(fake), real_label)
+            loss_d, loss_g = loss_d.item(), loss_g.item()
 
-            w_distance_est = self.critic(real).mean() - self.critic(fake).mean()
+            w_distance_est = self.discriminator(real).mean() - self.discriminator(fake).mean()
             w_distance_est = round(w_distance_est.item(), 5)
             w_distance_real = w_distance(real, fake)
 
@@ -305,35 +319,29 @@ class WGANTrainer(tune.Trainable):
                 ax.set_ylabel('Estimated Density by KDE', fontsize=32)
                 ax.tick_params(labelsize=32)
 
+                ax_r = ax.twinx()
+                x_range = np.linspace(x_min, x_max, 1000)
+                x_range_ = np.expand_dims(x_range, 1)
+                x_range_ = torch.from_numpy(x_range_.astype('float32')).to(self.config['device'])
+                dis_score = self.discriminator(x_range_)
+                dis_score = dis_score.cpu().data.numpy().squeeze()
+                ax_r.plot(x_range, dis_score, label='Predicted P(x is real)', color='green', linewidth=4)
+                ax_r.set_ylim([-0.1, 1.1])
+                ax_r.legend(loc=1, fontsize=32)
+                ax_r.set_ylabel('Predicted P(x is real)', fontsize=32)
+                ax_r.tick_params(labelsize=32)
+
                 cur_img_path = os.path.join(image_path, str(niter) + '.jpg')
                 plt.savefig(cur_img_path)
                 plt.close()
 
-        return w_distance_real, w_distance_est
-
-    def _gradient_penalty(self, real, fake):
-        batch_size = fake.size(0)
-        alpha = torch.rand(size=(batch_size, 1), device=self.config['device'])
-        alpha = alpha.expand_as(real)
-        interpolated = alpha * real + (1 - alpha) * fake
-        interpolated = Variable(interpolated, requires_grad=True).to(self.config['device'])
-        interpolation_loss = self.critic(interpolated)
-        gradients = autograd.grad(outputs=interpolation_loss,
-                                  inputs=interpolated,
-                                  grad_outputs=torch.ones(interpolation_loss.size(), device=self.config['device']),
-                                  create_graph=True,
-                                  retain_graph=True)[0]
-
-        gradients = gradients.view(gradients.size(0), -1)
-        return ((gradients.norm(2, dim=1) - 1.) ** 2).mean()
+        return w_distance_real, loss_d, loss_g
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
     args.batch_norm = not args.no_batch_norm
     args.spect_norm = not args.no_spectral_norm
-    # if args.log_interval > args.niters:
-    #     args.log_interval = args.niters // 10
     if args.auto:
         args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     else:
@@ -360,7 +368,7 @@ if __name__ == '__main__':
 
     # save path
     search_type = 'automatic' if args.auto else 'manual'
-    experiment = f'gu{args.gu_num}/wgan/' + \
+    experiment = f'gu{args.gu_num}/gan/' + \
                  'resnt|' * args.residual_block + 'fcnet|' * (not args.residual_block) + \
                  f'{args.prior}|' + \
                  f'activate_fn:{args.activation_fn}|' * (not args.auto) + \
@@ -383,7 +391,7 @@ if __name__ == '__main__':
         sched = ASHAScheduler(metric='w_distance_estimated', mode='min', max_t=2)
         algo = HyperOptSearch(config, metric="w_distance_estimated", mode="min", max_concurrent=10, random_state_seed=1)
         analysis = tune.run(
-            WGANTrainer,
+            GANTrainer,
             scheduler=sched,
             search_alg=algo,
             stop={"train_epoch": 1},
@@ -402,7 +410,7 @@ if __name__ == '__main__':
         logger.info(f'Saving to {model_path}')
         save_best_result_from_tune(best_model_dir, model_path)
     else:
-        trainer = WGANTrainer(config)
+        trainer = GANTrainer(config)
         _ = trainer._train()
 
         best_config = config
@@ -411,7 +419,7 @@ if __name__ == '__main__':
 
     logger.info('Start evaluation...')
 
-    eval_trainer = WGANTrainer(best_config)
+    eval_trainer = GANTrainer(best_config)
     eval_trainer._restore(model_path)
     eval_trainer._evaluate(display=True, niter=args.niters)
 
