@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 
 class GausUniffMixture:
     def __init__(self, n_mixture, mean_dist, sigma, unif_intsect, centralized=False, unif_ratio=1., device="cpu",
-                 seed=1):
+                 seed=1, extend_dim=False):
         np.random.seed(seed)
         torch.manual_seed(seed)
         self.device = torch.device(device)
@@ -18,6 +18,8 @@ class GausUniffMixture:
         self.unif_intsect = tuple(self.__cast(unif_intsect))
         unif_ratio = self.__cast(unif_ratio)
         self.unif_p = tuple(unif_ratio / (unif_ratio + 1))
+
+        self.extend_dim = extend_dim
 
     def get_sample(self, size):
 
@@ -44,13 +46,12 @@ class GausUniffMixture:
         dat = torch.from_numpy(sample_points.astype("float32")).to(self.device)
         dat = dat.view(size, -1)
 
-        return dat
+        # In MAF/ RealNVP, univariate data may not be useful in trainning.
+        if self.extend_dim:
+            ext_dat = torch.rand(size=dat.size(), device=self.device)
+            dat = torch.cat((dat, ext_dat), 1)
 
-    # def get_validate(self, size=10000):
-    #     return self.get_sample(size)
-    #
-    # def get_test(self, size=10000):
-    #     return self.get_sample(size)
+        return dat
 
     def __cast(self, val):
         if isinstance(val, (int, float)):
