@@ -17,10 +17,8 @@ import torch.nn.utils.spectral_norm as spectral_norm
 from torch import autograd
 from torch.autograd import Variable
 
-import ray
 import ray.tune as tune
-from ray.tune.schedulers import AsyncHyperBandScheduler, ASHAScheduler
-from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.schedulers import ASHAScheduler
 from hyperopt import hp
 
 from residualblock import ResidualBlock
@@ -29,7 +27,6 @@ from util import *
 
 parser = argparse.ArgumentParser()
 # action
-parser.add_argument('--smoke_test', action='store_true')
 parser.add_argument('--cuda', type=int, default=2, help='Number of CUDA to use if available.')
 # data
 parser.add_argument('--seed', type=int, default=1, help='Random seed to use.')
@@ -109,6 +106,7 @@ config = {
     'l': tune.choice([0, 1e-2, 1e-1, 1, 10]),
 
     'spect_norm': tune.choice([1, 0]),
+    # 'spect_norm': 1,
     'batch_norm': tune.choice([1, 0]),
 }
 
@@ -199,168 +197,12 @@ class Critic(nn.Module):
             raise NotImplementedError('Check init_method')
 
 
-# class WGANTrainer(tune.Trainable):
-#     def _setup(self, config):
-#         self.config = config
-#         self.prior = torch.randn() if self.config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
-#         self.i = 0
-#         # model
-#         """args controls: (1) resnet, (2) batch norm, (3) hybrid of sn/gp (4) activation function."""
-#         self.generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
-#                                    activation_slope=config['activation_slope'], init_method=config['init_method'],
-#                                    activation_fn=self.config['activation_fn'], batch_norm=self.config['batch_norm'],
-#                                    res_block=self.config['residual_block']).to(self.config['device'])
-#         self.critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
-#                              activation_slope=config['activation_slope'], init_method=config['init_method'],
-#                              activation_fn=self.config['activation_fn'], batch_norm=False, res_block=self.config['residual_block'],
-#                              spect_norm=self.config['spect_norm']).to(self.config['device'])
-#         # data
-#         """args controls all things here."""
-#         if self.config['gu_num'] == 8:
-#             self.dataloader = GausUniffMixture(n_mixture=self.config['gu_num'], mean_dist=10, sigma=2, unif_intsect=1.5,
-#                                                unif_ratio=1., device=self.config['device'])
-#         else:
-#             self.dataloader = GausUniffMixture(n_mixture=self.config['gu_num'], mean_dist=5, sigma=0.1, unif_intsect=5,
-#                                                unif_ratio=3, device=self.config['device'])
-#
-#         # optimizer
-#         self.optim_g = torch.optim.Adam([p for p in self.generator.parameters() if p.requires_grad],
-#                                         lr=config['lr'], betas=(config['beta1'], config['beta2']),
-#                                         weight_decay=config['weight_decay'])
-#         self.optim_c = torch.optim.Adam([p for p in self.critic.parameters() if p.requires_grad],
-#                                         lr=config['lr'], betas=(config['beta1'], config['beta2']),
-#                                         weight_decay=config['weight_decay'])
-#         if self.config['clr']:
-#             self.sche_g = torch.optim.lr_scheduler.CyclicLR(self.optim_g, base_lr=config['lr'] / config['clr_scale'],
-#                                                             max_lr=config['lr'], step_size_up=config['clr_size_up'],
-#                                                             cycle_momentum=False)
-#             self.sche_c = torch.optim.lr_scheduler.CyclicLR(self.optim_c, base_lr=config['lr'] / config['clr_scale'],
-#                                                             max_lr=config['lr'], step_size_up=config['clr_size_up'],
-#                                                             cycle_momentum=False)
-#         else:
-#             self.sche_g, self.sche_c = None, None
-#
-#     def _train(self):
-#         self.generator.train()
-#         self.critic.train()
-#
-#         start = time.time()
-#         for i in range(1, self.config["niters"] + 1):
-#             for k in range(self.config['k']):
-#                 real = self.dataloader.get_sample(self.config['batch_size'])
-#                 prior = self.prior(size=(self.config['batch_size'], self.config['prior_size']), device=self.config['device'])
-#                 fake = self.generator(prior)
-#
-#                 loss_c = self.critic(fake.detach()).mean() - self.critic(real).mean()
-#                 loss_c += self.config["l"] * self._gradient_penalty(real, fake)
-#                 self.optim_c.zero_grad()
-#                 loss_c.backward()
-#                 self.optim_c.step()
-#                 if self.sche_c:
-#                     self.sche_c.step()
-#
-#             prior = self.prior(size=(self.config['batch_size'], self.config['prior_size']), device=self.config['device'])
-#             fake = self.generator(prior)
-#             loss_g = - self.critic(fake).mean()
-#             self.optim_g.zero_grad()
-#             loss_g.backward()
-#             self.optim_g.step()
-#             if self.sche_g:
-#                 self.sche_g.step()
-#
-#             if i % self.config['log_interval'] == 0 and not self.config['auto']:
-#                 cur_state_path = os.path.join(model_path, str(i))
-#                 torch.save(self.generator, cur_state_path + '_' + 'generator.pth')
-#                 torch.save(self.critic, cur_state_path + '_' + 'critic.pth')
-#
-#                 w_distance_real, w_distance_est = self._evaluate(display=True, niter=i)
-#
-#                 logger.info(f'Iter: {i} / {self.config["niters"]}, Time: {round(time.time() - start, 4)},  '
-#                             f'w_distance_real: {w_distance_real}, w_distance_estimated: {w_distance_est}')
-#
-#                 start = time.time()
-#
-#         w_distance_real, w_distance_est = self._evaluate(display=False, niter=self.config['niters'])
-#         return {'w_distance_estimated': w_distance_est,
-#                 'w_distance_real': w_distance_real,
-#                 'iteration': config['niters']}
-#
-#     def _save(self, tmp_checkpoint_dir):
-#         generator_path = os.path.join(tmp_checkpoint_dir, 'generator.pth')
-#         critic_path = os.path.join(tmp_checkpoint_dir, 'critic.pth')
-#
-#         torch.save(self.generator.state_dict(), generator_path)
-#         torch.save(self.critic.state_dict(), critic_path)
-#         return tmp_checkpoint_dir
-#
-#     def _restore(self, checkpoint_dir):
-#         generator_path = os.path.join(checkpoint_dir, 'generator.pth')
-#         critic_path = os.path.join(checkpoint_dir, 'critic.pth')
-#
-#         self.generator.load_state_dict(torch.load(generator_path))
-#         self.critic.load_state_dict(torch.load(critic_path))
-#
-#     def _evaluate(self, display, niter):
-#         with torch.no_grad():
-#             real = self.dataloader.get_sample(self.config['eval_size'])
-#             prior = self.prior(size=(self.config['eval_size'], self.config['prior_size']), device=self.config['device'])
-#             fake = self.generator(prior)
-#
-#             w_distance_est = self.critic(real).mean() - self.critic(fake).mean()
-#             w_distance_est = round(w_distance_est.item(), 5)
-#             w_distance_real = w_distance(real, fake)
-#
-#             if display:
-#                 # save images
-#                 real_sample = real.cpu().data.numpy().squeeze()
-#                 fake_sample = fake.cpu().data.numpy().squeeze()
-#
-#                 plt.cla()
-#                 fig = plt.figure(figsize=(60, 25))
-#                 fig.subplots_adjust(top=0.80)
-#
-#                 ax = fig.add_subplot(111)
-#                 _sample = np.concatenate([real_sample, fake_sample])
-#                 x_min, x_max = min(_sample), max(_sample)
-#                 range_width = x_max - x_min
-#                 kde_num = 200
-#                 kde_width = kde_num * range_width / self.config['eval_size']
-#                 sns.kdeplot(real_sample, bw=kde_width, label='Estimated Density by KDE: Real', color='skyblue', shade=True)
-#                 sns.kdeplot(fake_sample, bw=kde_width, label='Estimated Density by KDE: Fake', color='red', shade=True)
-#                 ax.set_title(f'W_distance_real: {w_distance_real}, W_distance_estimated: {w_distance_est}', fontsize=32)
-#                 ax.legend(loc=2, fontsize=32)
-#                 ax.set_ylabel('Estimated Density by KDE', fontsize=32)
-#                 ax.tick_params(labelsize=32)
-#
-#                 cur_img_path = os.path.join(image_path, str(niter) + '.jpg')
-#                 plt.savefig(cur_img_path)
-#                 plt.close()
-#
-#         return w_distance_real, w_distance_est
-#
-#     def _gradient_penalty(self, real, fake):
-#         batch_size = fake.size(0)
-#         alpha = torch.rand(size=(batch_size, 1), device=self.config['device'])
-#         alpha = alpha.expand_as(real)
-#         interpolated = alpha * real + (1 - alpha) * fake
-#         interpolated = Variable(interpolated, requires_grad=True).to(self.config['device'])
-#         interpolation_loss = self.critic(interpolated)
-#         gradients = autograd.grad(outputs=interpolation_loss,
-#                                   inputs=interpolated,
-#                                   grad_outputs=torch.ones(interpolation_loss.size(), device=self.config['device']),
-#                                   create_graph=True,
-#                                   retain_graph=True)[0]
-#
-#         gradients = gradients.view(gradients.size(0), -1)
-#         return ((gradients.norm(2, dim=1) - 1.) ** 2).mean()
-
 class WGANTrainer(tune.Trainable):
     def _setup(self, config):
         self.config = config
         self.prior = torch.randn() if self.config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
         self.i = 0
         # model
-        """args controls: (1) resnet, (2) batch norm, (3) hybrid of sn/gp (4) activation function."""
         self.generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
                                    activation_slope=config['activation_slope'], init_method=config['init_method'],
                                    activation_fn=self.config['activation_fn'], batch_norm=self.config['batch_norm'],
@@ -371,7 +213,6 @@ class WGANTrainer(tune.Trainable):
                              activation_fn=self.config['activation_fn'], batch_norm=False, res_block=self.config['residual_block'],
                              spect_norm=self.config['spect_norm']).to(self.config['device'])
         # data
-        """args controls all things here."""
         if self.config['gu_num'] == 8:
             self.dataloader = GausUniffMixture(n_mixture=self.config['gu_num'], mean_dist=10, sigma=2, unif_intsect=1.5,
                                                unif_ratio=1., device=self.config['device'])
@@ -491,10 +332,10 @@ class WGANTrainer(tune.Trainable):
                 range_width = x_max - x_min
                 kde_num = 200
                 kde_width = kde_num * range_width / args.eval_size
-                sns.kdeplot(real_sample, bw=kde_width, label='Real', color='green', shade=True, linewidth=6)
-                sns.kdeplot(fake_sample, bw=kde_width, label='Fake', color='orange', shade=True, linewidth=6)
+                sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=6)
+                sns.kdeplot(fake_sample, bw=kde_width, label='Model', color='orange', shade=True, linewidth=6)
 
-                ax.set_title(f'Real EM Distance: {w_distance_real}, '
+                ax.set_title(f'True EM Distance: {w_distance_real}, '
                              f'Est. EM Distance: {w_distance_est}.', fontsize=FONTSIZE)
                 ax.legend(loc=2, fontsize=FONTSIZE)
                 ax.set_ylabel('Estimated Density by KDE', fontsize=FONTSIZE)
@@ -506,27 +347,6 @@ class WGANTrainer(tune.Trainable):
 
                 plt.savefig(cur_img_path)
                 plt.close()
-
-                # plt.cla()
-                # fig = plt.figure(figsize=(60, 25))
-                # fig.subplots_adjust(top=0.80)
-                #
-                # ax = fig.add_subplot(111)
-                # _sample = np.concatenate([real_sample, fake_sample])
-                # x_min, x_max = min(_sample), max(_sample)
-                # range_width = x_max - x_min
-                # kde_num = 200
-                # kde_width = kde_num * range_width / self.config['eval_size']
-                # sns.kdeplot(real_sample, bw=kde_width, label='Estimated Density by KDE: Real', color='skyblue', shade=True)
-                # sns.kdeplot(fake_sample, bw=kde_width, label='Estimated Density by KDE: Fake', color='red', shade=True)
-                # ax.set_title(f'W_distance_real: {w_distance_real}, W_distance_estimated: {w_distance_est}', fontsize=32)
-                # ax.legend(loc=2, fontsize=32)
-                # ax.set_ylabel('Estimated Density by KDE', fontsize=32)
-                # ax.tick_params(labelsize=32)
-                #
-                # cur_img_path = os.path.join(image_path, str(niter) + '.jpg')
-                # plt.savefig(cur_img_path)
-                # plt.close()
 
         return w_distance_real, w_distance_est
 
@@ -559,14 +379,15 @@ if __name__ == '__main__':
     # Add constant params in args to config.
     dict_args = vars(args)
     for key in dict_args:
+        if key in ['no_batch_norm', 'no_spectral_norm']:
+            continue
         if key in config:
-            if key in ['no_batch_norm', 'no_spectral_norm']:
-                continue
             if not args.auto:
                 config[key] = dict_args[key]
         else:
             config[key] = dict_args[key]
 
+    # print(config)
     if args.auto:
         # Reset hyperparameter in clr.
         if not args.clr:
@@ -574,12 +395,14 @@ if __name__ == '__main__':
             config["clr_size_up"] = 2000
         # Set deeper depth of resnet.
         if args.residual_block:
-            config["n_hidden"] = hp.choice('n_hidden', [1, 3, 5, 7])
+            config["n_hidden"] = tune.choice([1, 3, 5, 7])
 
+    # print(config)
+    # exit(1)
 
     # save path
     search_type = 'automatic' if args.auto else 'manual'
-    experiment = f'gu{args.gu_num}/wgan/' + str(args.niters) + \
+    experiment = f'gu{args.gu_num}/wgan/{args.niters}|' + \
                   args.eval_real * 'w_distance_real|' + (not args.eval_real) * 'w_distance_estimated|' + \
                  'resnt|' * args.residual_block + 'fcnet|' * (not args.residual_block) + \
                  f'{args.prior}|' + \

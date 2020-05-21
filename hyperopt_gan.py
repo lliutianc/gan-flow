@@ -347,10 +347,10 @@ class GANTrainer(tune.Trainable):
                 range_width = x_max - x_min
                 kde_num = 200
                 kde_width = kde_num * range_width / args.eval_size
-                sns.kdeplot(real_sample, bw=kde_width, label='Real', color='green', shade=True, linewidth=6)
-                sns.kdeplot(fake_sample, bw=kde_width, label='Fake', color='orange', shade=True, linewidth=6)
+                sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=6)
+                sns.kdeplot(fake_sample, bw=kde_width, label='Model', color='orange', shade=True, linewidth=6)
 
-                ax.set_title(f'Real EM Distance: {w_distance_real}.', fontsize=FONTSIZE)
+                ax.set_title(f'True EM Distance: {w_distance_real}.', fontsize=FONTSIZE)
                 ax.legend(loc=2, fontsize=FONTSIZE)
                 ax.set_ylabel('Estimated Density by KDE', fontsize=FONTSIZE)
                 ax.tick_params(axis='x', labelsize=FONTSIZE * 0.7)

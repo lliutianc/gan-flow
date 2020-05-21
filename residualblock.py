@@ -7,7 +7,7 @@ class ResidualBlock(nn.Module):
         super().__init__()
 
         if input_size == output_size:
-            shortcut = nn.Identity()
+            shortcut = [nn.Identity()]
         else:
             shortcut = [spectral_norm(nn.Linear(input_size, output_size)) if spect_norm else
                         nn.Linear(input_size, output_size)]
