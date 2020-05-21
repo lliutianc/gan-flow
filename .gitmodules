@@ -4,3 +4,6 @@
 [submodule "ffjord"]
 	path = ffjord
 	url = git@github.com:lliutianc/ffjord.git
+[submodule "sylvester-flows"]
+	path = sylvester-flows
+	url = git@github.com:lliutianc/sylvester-flows.git
