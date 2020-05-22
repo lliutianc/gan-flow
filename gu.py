@@ -49,7 +49,7 @@ class GausUniffMixture:
         # In MAF/ RealNVP, univariate data may not be useful in trainning.
         if self.extend_dim:
             ext_dat = torch.rand(size=dat.size(), device=self.device)
-            dat = torch.cat((dat, ext_dat), 1)
+            dat = torch.cat((dat, dat + ext_dat), 1)
 
         return dat
 
@@ -91,5 +91,5 @@ class GU(Dataset):
     def __getitem__(self, i):
         real = self.gu.get_sample(1)
         extra_real = torch.rand(size=real.size(), device=self.device)
-        real = torch.cat((real, extra_real), 1)
+        real = torch.cat((real, extra_real + real), 1)
         return real, torch.zeros(self.label_size)
