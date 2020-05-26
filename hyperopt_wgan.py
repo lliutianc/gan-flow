@@ -54,7 +54,7 @@ parser.add_argument('--clr', action='store_true', help='Use cyclic LR in trainin
 parser.add_argument('--clr_size_up', type=int, default=2000, help='Size of up step in cyclic LR.')
 parser.add_argument('--clr_scale', type=int, default=3, help='Scale of base lr in cyclic LR.')
 parser.add_argument('--k', type=int, default=5, help='Update times of critic in each iterations.')
-parser.add_argument('--l', type=int, default=0.1, help='Coefficient for Gradient penalty.')
+parser.add_argument('--l', type=float, default=0.1, help='Coefficient for Gradient penalty.')
 parser.add_argument('--no_spectral_norm', action='store_true', help='Do not use spectral normalization in critic.')
 parser.add_argument('--log_interval', type=int, default=1000, help='How often to show loss statistics and save models/samples.')
 
