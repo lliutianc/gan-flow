@@ -14,7 +14,7 @@ def w_distance(real_tensor, fake_tensor):
     real = real_tensor.cpu().data.numpy().squeeze()
     fake = fake_tensor.cpu().data.numpy().squeeze()
 
-    return np.round(wasserstein_distance(real, fake), 5)
+    return np.round(wasserstein_distance(real, fake), 4)
 
 
 def count_parameters(net):

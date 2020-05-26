@@ -105,8 +105,8 @@ config = {
     'k': tune.choice([1, 5, 10, 50, 100]),
     'l': tune.choice([0, 1e-2, 1e-1, 1, 10]),
 
-    'spect_norm': tune.choice([1, 0]),
-    # 'spect_norm': 1,
+    # 'spect_norm': tune.choice([1, 0]),
+    'spect_norm': 1,
     'batch_norm': tune.choice([1, 0]),
 }
 
@@ -177,7 +177,8 @@ class Critic(nn.Module):
             else:
                 modules += [spectral_norm(nn.Linear(hidden_size, hidden_size)) if spect_norm else nn.Linear(hidden_size, hidden_size)]
             modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
-        modules += [activation, nn.Linear(hidden_size, 1)]
+        modules += [activation]
+        modules += [spectral_norm(nn.Linear(hidden_size, 1)) if spect_norm else nn.Linear(hidden_size, 1)]
         self.model = nn.Sequential(*modules)
         self.init_method = init_method
         self.model.apply(self.__init)
@@ -203,15 +204,17 @@ class WGANTrainer(tune.Trainable):
         self.prior = torch.randn() if self.config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
         self.i = 0
         # model
-        self.generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
-                                   activation_slope=config['activation_slope'], init_method=config['init_method'],
-                                   activation_fn=self.config['activation_fn'], batch_norm=self.config['batch_norm'],
-                                   res_block=self.config['residual_block']).to(self.config['device'])
+        self.generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'],
+                     hidden_size=config['hidden_size'],
+                     activation_slope=config['activation_slope'], init_method=config['init_method'],
+                     activation_fn=config['activation_fn'], batch_norm=config['batch_norm'],
+                     res_block=config['residual_block']).to(config['device'])
 
         self.critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
-                             activation_slope=config['activation_slope'], init_method=config['init_method'],
-                             activation_fn=self.config['activation_fn'], batch_norm=False, res_block=self.config['residual_block'],
-                             spect_norm=self.config['spect_norm']).to(self.config['device'])
+                    activation_slope=config['activation_slope'], init_method=config['init_method'],
+                    activation_fn=config['activation_fn'], batch_norm=False,
+                    res_block=config['residual_block'],
+                    spect_norm=config['spect_norm']).to(config['device'])
         # data
         if self.config['gu_num'] == 8:
             self.dataloader = GausUniffMixture(n_mixture=self.config['gu_num'], mean_dist=10, sigma=2, unif_intsect=1.5,
@@ -291,6 +294,15 @@ class WGANTrainer(tune.Trainable):
 
         torch.save(self.generator.state_dict(), generator_path)
         torch.save(self.critic.state_dict(), critic_path)
+
+        return tmp_checkpoint_dir
+
+    def _save_whole(self, tmp_checkpoint_dir):
+        generator_path = os.path.join(tmp_checkpoint_dir, 'generator.pth')
+        critic_path = os.path.join(tmp_checkpoint_dir, 'critic.pth')
+        torch.save(self.generator.to('cpu'), generator_path)
+        torch.save(self.critic.to('cpu'), critic_path)
+
         return tmp_checkpoint_dir
 
     def _restore(self, checkpoint_dir):
@@ -307,7 +319,7 @@ class WGANTrainer(tune.Trainable):
             fake = self.generator(prior)
 
             w_distance_est = self.critic(real).mean() - self.critic(fake).mean()
-            w_distance_est = round(w_distance_est.item(), 5)
+            w_distance_est = abs(round(w_distance_est.item(), 5))
             w_distance_real = w_distance(real, fake)
 
             if display:
@@ -327,13 +339,14 @@ class WGANTrainer(tune.Trainable):
                 ax.spines["left"].set_visible(False)
                 ax.get_xaxis().tick_bottom()
 
-                _sample = np.concatenate([real_sample, fake_sample])
-                x_min, x_max = min(_sample), max(_sample)
-                range_width = x_max - x_min
+                # _sample = np.concatenate([real_sample, fake_sample])
                 kde_num = 200
-                kde_width = kde_num * range_width / args.eval_size
-                sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=6)
-                sns.kdeplot(fake_sample, bw=kde_width, label='Model', color='orange', shade=True, linewidth=6)
+                min_real, max_real = min(real_sample), max(real_sample)
+                kde_width_real = kde_num * (max_real - min_real) / args.eval_size
+                min_fake, max_fake = min(fake_sample), max(fake_sample)
+                kde_width_fake = kde_num * (max_fake - min_fake) / args.eval_size
+                sns.kdeplot(real_sample, bw=kde_width_real, label='Data', color='green', shade=True, linewidth=6)
+                sns.kdeplot(fake_sample, bw=kde_width_fake, label='Model', color='orange', shade=True, linewidth=6)
 
                 ax.set_title(f'True EM Distance: {w_distance_real}, '
                              f'Est. EM Distance: {w_distance_est}.', fontsize=FONTSIZE)
@@ -459,21 +472,23 @@ if __name__ == '__main__':
 
         logger.info(f'Best config is: {best_config}')
         best_model_dir = retrieve_best_result_from_tune(best_path)
-        logger.info(f'Saving to {model_path}')
-        save_best_result_from_tune(best_model_dir, model_path)
+        # logger.info(f'Saving to {model_path}')
+        # save_best_result_from_tune(best_model_dir, model_path)
     else:
         trainer = WGANTrainer(config)
         for _ in range(1, config['niters'] + 1):
             _ = trainer._train()
 
         best_config = config
-        logger.info(f'Saving to {model_path}')
-        trainer._save(model_path)
+        best_model_dir = model_path
+        # logger.info(f'Saving to {model_path}')
+        # trainer._save_whole(model_path)
 
     logger.info('Start evaluation...')
 
     eval_trainer = WGANTrainer(best_config)
-    eval_trainer._restore(model_path)
+    eval_trainer._restore(best_model_dir)
     eval_trainer._evaluate(display=True, niter=args.niters)
+    eval_trainer._save_whole(model_path)
 
     logger.info('Finish All...')

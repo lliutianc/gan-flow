@@ -342,13 +342,14 @@ class GANTrainer(tune.Trainable):
                 ax.spines["left"].set_visible(False)
                 ax.get_xaxis().tick_bottom()
 
-                _sample = np.concatenate([real_sample, fake_sample])
-                x_min, x_max = min(_sample), max(_sample)
-                range_width = x_max - x_min
+                # _sample = np.concatenate([real_sample, fake_sample])
                 kde_num = 200
-                kde_width = kde_num * range_width / args.eval_size
-                sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=6)
-                sns.kdeplot(fake_sample, bw=kde_width, label='Model', color='orange', shade=True, linewidth=6)
+                min_real, max_real = min(real_sample), max(real_sample)
+                kde_width_real = kde_num * (max_real - min_real) / args.eval_size
+                min_fake, max_fake = min(fake_sample), max(fake_sample)
+                kde_width_fake = kde_num * (max_fake - min_fake) / args.eval_size
+                sns.kdeplot(real_sample, bw=kde_width_real, label='Data', color='green', shade=True, linewidth=6)
+                sns.kdeplot(fake_sample, bw=kde_width_fake, label='Model', color='orange', shade=True, linewidth=6)
 
                 ax.set_title(f'True EM Distance: {w_distance_real}.', fontsize=FONTSIZE)
                 ax.legend(loc=2, fontsize=FONTSIZE)
@@ -360,6 +361,8 @@ class GANTrainer(tune.Trainable):
                 plt.tight_layout()
 
                 ax_r = ax.twinx()
+                _sample = np.concatenate([real_sample, fake_sample])
+                x_min, x_max = min(_sample), max(_sample)
                 x_range = np.linspace(x_min, x_max, 1000)
                 x_range_ = np.expand_dims(x_range, 1)
                 x_range_ = torch.from_numpy(x_range_.astype('float32')).to(self.config['device'])
