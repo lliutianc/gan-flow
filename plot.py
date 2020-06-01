@@ -11,6 +11,13 @@ import seaborn.apionly as sns
 
 plt.style.use('seaborn-paper')
 
+
+import torch.nn as nn
+import torch.nn.utils.spectral_norm as spectral_norm
+from torch import autograd
+from torch.autograd import Variable
+
+
 from gu import *
 from util import *
 
@@ -19,13 +26,22 @@ import ffjord.gu_ffjord as gu_ffjord
 
 device = torch.device(f'cuda' if torch.cuda.is_available() else 'cpu')
 
-gum_config = { 'activation_fn': 'tanh', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 1, 'batch_size': 2048,
-                'beta1': 0.8, 'beta2': 0.999, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
-                'device': 'cuda', 'eval_real': True, 'eval_size': 100000, 'exp_num': 100, 'gu_num': 1,
-                'hidden_size': 64, 'init_method': 'xav_u', 'k': 100, 'l': 0.01, 'log_interval': 1000, 'lr': 5e-05,
-                'n_hidden': 4, 'niters': 50000, 'no_batch_norm': False, 'no_spectral_norm': False, 'prior': 'gaussian',
-                'prior_size': 5, 'residual_block': False, 'seed': 1, 'smoke_test': False, 'spect_norm': 0,
-                'weight_decay': 0.0001 }
+# gum_config = { 'activation_fn': 'tanh', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 1, 'batch_size': 2048,
+#                 'beta1': 0.8, 'beta2': 0.999, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
+#                 'device': 'cuda', 'eval_real': True, 'eval_size': 100000, 'exp_num': 100, 'gu_num': 1,
+#                 'hidden_size': 64, 'init_method': 'xav_u', 'k': 100, 'l': 0.01, 'log_interval': 1000, 'lr': 5e-05,
+#                 'n_hidden': 4, 'niters': 50000, 'no_batch_norm': False, 'no_spectral_norm': False, 'prior': 'gaussian',
+#                 'prior_size': 5, 'residual_block': False, 'seed': 1, 'smoke_test': False, 'spect_norm': 0,
+#                 'weight_decay': 0.0001
+#               }
+
+gum_config = { 'activation_fn': 'relu', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 0, 'batch_size': 2048,
+               'beta1': 0.5, 'beta2': 0.7, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
+               'device': 'cuda', 'eval_real': True, 'eval_size': 100000, 'exp_num': 100, 'gu_num': 1, 'hidden_size': 64,
+               'init_method': 'default', 'k': 100, 'l': 0.0, 'log_interval': 1000, 'lr': 1e-05, 'n_hidden': 1,
+               'niters': 50000, 'prior': 'gaussian', 'prior_size': 1, 'residual_block': False, 'seed': 1,
+               'spect_norm': 1, 'weight_decay': 1e-05
+               }
 
 mgum_config = { 'activation_fn': 'relu', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 1, 'batch_size': 2048,
                'beta1': 0.8, 'beta2': 0.7, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
@@ -33,8 +49,95 @@ mgum_config = { 'activation_fn': 'relu', 'activation_slope': 0.01, 'auto': True,
                'hidden_size': 128,
                'init_method': 'default', 'k': 100, 'l': 0.1, 'log_interval': 1000, 'lr': 0.0005, 'n_hidden': 3,
                'niters': 50000, 'no_batch_norm': False, 'no_spectral_norm': False, 'prior': 'gaussian', 'prior_size': 3,
-               'residual_block': False, 'seed': 1, 'smoke_test': False, 'spect_norm': 0, 'weight_decay': 5e-05 }
+               'residual_block': False, 'seed': 1, 'smoke_test': False, 'spect_norm': 0, 'weight_decay': 5e-05
+                }
 
+
+class Generator(nn.Module):
+    def __init__(self, input_size, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
+                 batch_norm=True, res_block=False):
+        super().__init__()
+        # Define activation function.
+        if activation_fn == 'relu':
+            activation = nn.ReLU(inplace=True)
+        elif activation_fn == 'leakyrelu':
+            activation = nn.LeakyReLU(inplace=True, negative_slope=activation_slope)
+        elif activation_fn == 'tanh':
+            activation = nn.Tanh()
+        else:
+            raise NotImplementedError('Check activation_fn.')
+
+        # Define network architecture.
+        modules = [nn.Linear(input_size, hidden_size)] + batch_norm * [nn.BatchNorm1d(hidden_size)]
+        for _ in range(n_hidden):
+            if res_block:
+                modules += [activation, ResidualBlock(hidden_size, hidden_size, activation, False, batch_norm)]
+            else:
+                modules += [activation, nn.Linear(hidden_size, hidden_size)]
+            modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+        modules += [activation, nn.Linear(hidden_size, 1)]
+        self.model = nn.Sequential(*modules)
+        self.init_method = init_method
+        self.model.apply(self.__init)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def __init(self, m):
+        classname = m.__class__.__name__
+
+        if self.init_method == 'default':
+            return
+        elif self.init_method == 'xav_u':
+            if classname.find('Linear') != -1:
+                nn.init.xavier_uniform_(m.weight, gain=1)
+        else:
+            raise NotImplementedError('Check init_method')
+
+
+class Critic(nn.Module):
+    def __init__(self, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
+                 spect_norm=True, batch_norm=False, res_block=False):
+        super().__init__()
+        # Define activation function.
+        if activation_fn == 'relu':
+            activation = nn.ReLU(inplace=True)
+        elif activation_fn == 'leakyrelu':
+            activation = nn.LeakyReLU(inplace=True, negative_slope=activation_slope)
+        elif activation_fn == 'tanh':
+            activation = nn.Tanh()
+        else:
+            raise NotImplementedError('Check activation_fn.')
+
+        # Define network architecture.
+        modules = [spectral_norm(nn.Linear(1, hidden_size)) if spect_norm else nn.Linear(1, hidden_size)]
+        modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+        for _ in range(n_hidden):
+            modules += [activation]
+            if res_block:
+                modules += [ResidualBlock(hidden_size, hidden_size, activation, spect_norm, batch_norm)]
+            else:
+                modules += [spectral_norm(nn.Linear(hidden_size, hidden_size)) if spect_norm else nn.Linear(hidden_size, hidden_size)]
+            modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+        modules += [activation]
+        modules += [spectral_norm(nn.Linear(hidden_size, 1)) if spect_norm else nn.Linear(hidden_size, 1)]
+        self.model = nn.Sequential(*modules)
+        self.init_method = init_method
+        self.model.apply(self.__init)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def __init(self, m):
+        classname = m.__class__.__name__
+
+        if self.init_method == 'default':
+            return
+        elif self.init_method == 'xav_u':
+            if classname.find('Linear') != -1:
+                nn.init.xavier_uniform_(m.weight, gain=1)
+        else:
+            raise NotImplementedError('Check init_method')
 
 
 def plot_together(data, wgan_config=None):
@@ -56,20 +159,25 @@ def plot_together(data, wgan_config=None):
     ffjord = torch.load(model_path + '/ffjord.pth', map_location=device)
 
     # Load wgan
-    generator = torch.load(model_path + '/generator.pth', map_location=device)
-    critic = torch.load(model_path + '/critic.pth', map_location=device)
+    # generator = torch.load(model_path + '/generator.pth', map_location=device)
+    # critic = torch.load(model_path + '/critic.pth', map_location=device)
 
-    # generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'],
-    #                  hidden_size=config['hidden_size'],
-    #                  activation_slope=config['activation_slope'], init_method=config['init_method'],
-    #                  activation_fn=config['activation_fn'], batch_norm=config['batch_norm'],
-    #                  res_block=config['residual_block']).to(device)
-    #
-    # critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
-    #                 activation_slope=config['activation_slope'], init_method=config['init_method'],
-    #                 activation_fn=config['activation_fn'], batch_norm=False,
-    #                 res_block=config['residual_block'],
-    #                 spect_norm=config['spect_norm']).to(device)
+    generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'],
+                     hidden_size=config['hidden_size'],
+                     activation_slope=config['activation_slope'], init_method=config['init_method'],
+                     activation_fn=config['activation_fn'], batch_norm=config['batch_norm'],
+                     res_block=config['residual_block']).to(device)
+
+    critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
+                    activation_slope=config['activation_slope'], init_method=config['init_method'],
+                    activation_fn=config['activation_fn'], batch_norm=False,
+                    res_block=config['residual_block'],
+                    spect_norm=config['spect_norm']).to(device)
+    generator.load_state_dict(torch.load(model_path + '/generator.pth', map_location=device))
+    critic.load_state_dict(torch.load(model_path + '/critic.pth', map_location=device))
+
+    torch.save(generator, model_path + '/generator.pth')
+    torch.save(critic, model_path + '/critic.pth')
 
 
     real = dataloader.get_sample(eval_size)
@@ -118,7 +226,7 @@ def plot_together(data, wgan_config=None):
     ax.spines["bottom"].set_linewidth(6)
     ax.spines["right"].set_linewidth(6)
     ax.spines["left"].set_linewidth(6)
-    kde_num = 1000
+    # kde_num = 1000
 
 
     # maf
@@ -170,7 +278,7 @@ def plot_together(data, wgan_config=None):
     plt.close()
 
 
-def plot_separately(data, wgan_config=None):
+def plot_separately(data, wgan_config=None, kde_num=500):
     config = wgan_config
 
     if data == 'gum':
@@ -340,7 +448,7 @@ def plot_separately(data, wgan_config=None):
 
     # plt.tight_layout()
     # fig = ax.get_figure()
-    fig.suptitle(f'{data.upper()}. Model Name (True EM Distance, (Est. EM Distance))', fontsize=FONTSIZE * 0.7)
+    # fig.suptitle(f'{data.upper()}. Model Name (True EM Distance, (Est. EM Distance))', fontsize=FONTSIZE * 0.7)
     # fig.tight_layout(h_pad=1., w_pad=1)
     # fig.subplots_adjust(top=0.95)
 

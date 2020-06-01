@@ -38,8 +38,12 @@ parser.add_argument('--hidden_size', type=int, default=256, help='Hidden layer s
 parser.add_argument('--n_hidden', type=int, default=3, help='Number of hidden layers(Residual blocks) in GAN/WGAN.')
 parser.add_argument('--activation_fn', type=str, choices=['relu', 'leakyrelu', 'tanh'], default='leakyrelu', help='What activation function to use in GAN/WGAN.')
 parser.add_argument('--activation_slope', type=float, default=1e-2, help='Negative slope of LeakyReLU activation function.')
+
+parser.add_argument('--no_spectral_norm', action='store_true', help='Do not use spectral normalization in critic.')
 parser.add_argument('--no_batch_norm', action='store_true', help='Do not use batch norm')
 parser.add_argument('--residual_block', action='store_true', help='Use residual block')
+parser.add_argument('--dropout', action='store_true', help='Use dropout')
+parser.add_argument('--norm', type=str, choices=['layer', 'batch', None], default='batch', help='Which normaliztion to be used.')
 parser.add_argument('--init_method', type=str, choices=['default', 'xav_u'], default='default', help='Use residual block')
 
 # training params
@@ -55,41 +59,19 @@ parser.add_argument('--clr_size_up', type=int, default=2000, help='Size of up st
 parser.add_argument('--clr_scale', type=int, default=3, help='Scale of base lr in cyclic LR.')
 parser.add_argument('--k', type=int, default=5, help='Update times of critic in each iterations.')
 parser.add_argument('--l', type=float, default=0.1, help='Coefficient for Gradient penalty.')
-parser.add_argument('--no_spectral_norm', action='store_true', help='Do not use spectral normalization in critic.')
-parser.add_argument('--log_interval', type=int, default=1000, help='How often to show loss statistics and save models/samples.')
 
 parser.add_argument('--auto', action='store_true', help='Using parameter searching to find the best result.')
+parser.add_argument('--auto_full', action='store_true', help='Using parameter searching to find the best result.')
 parser.add_argument('--eval_size', type=int, default=100000, help='Sample size in evaluation.')
-parser.add_argument('--exp_num', type=int, default=50, help='Number of experiments.')
+parser.add_argument('--exp_num', type=int, default=100, help='Number of experiments.')
 parser.add_argument('--eval_real', action='store_true', help='use w_distance_real to choose best model.')
+parser.add_argument('--log_interval', type=int, default=1000, help='How often to show loss statistics and save models/samples.')
 
-
-# config = {
-#     'prior_size': hp.choice('prior_size', [1, 3, 5]),
-#     'hidden_size': hp.choice('hidden_size', [64, 128, 256]),
-#     'n_hidden': hp.choice('n_hidden', [1, 2, 3]),
-#     'activation_slope': 1e-2,
-#     'activation_fn': hp.choice('activation_fn', ['relu', 'leakyrelu', 'tanh']),
-#     'init_method': hp.choice('init_method', ['default', 'xav_u']),
-#
-#     'lr': hp.choice("lr", [1e-5, 5e-5, 1e-4, 5e-4, 1e-3]),
-#     'weight_decay': hp.choice("weight_decay", [0., 1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 1e-3]),
-#     'beta1': hp.choice('beta1', [0.5, 0.6, 0.7, 0.8, 0.9]),
-#     'beta2': hp.choice('beta2', [0.7, 0.8, 0.9, 0.999]),
-#
-#     'clr_scale': hp.choice('clr_scale', [2, 3, 4, 5]),
-#     'clr_size_up': hp.choice('clr_size_up', [2000, 4000, 6000, 8000]),
-#     'k': hp.choice('k', [1, 5, 10, 50, 100]),
-#     'l': hp.choice('l', [0, 1e-2, 1e-1, 1, 10]),
-#
-#     'spect_norm': hp.choice('spect_norm', [True, False]),
-#     'batch_norm': hp.choice('batch_norm', [True, False]),
-# }
-#
 
 config = {
-    'prior_size': tune.choice([1, 3, 5]),
-    'hidden_size': tune.choice([64, 128, 256]),
+    # 'prior': tune.choice(['uniform', 'gaussian']),
+    'prior_size': tune.choice([1, 3, 5, 7]),
+    'hidden_size': tune.choice([64, 128, 256, 512]),
     'n_hidden': tune.choice([1, 2, 3, 4]),
     'activation_slope': 1e-2,
     'activation_fn': tune.choice(['relu', 'leakyrelu', 'tanh']),
@@ -106,14 +88,114 @@ config = {
     'l': tune.choice([0, 1e-2, 1e-1, 1, 10]),
 
     # 'spect_norm': tune.choice([1, 0]),
-    'spect_norm': 1,
+    # 'clr': tune.choice([1, 0]),
+    'spect_norm': tune.choice([1, 0]),
     'batch_norm': tune.choice([1, 0]),
+    # 'dropout': tune.choice([1, 0]),
 }
+
+
+# class Generator(nn.Module):
+#     def __init__(self, input_size, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
+#                  batch_norm=True, res_block=False, dropout=False, dropout_p=0.5):
+#         super().__init__()
+#         # Define activation function.
+#         if activation_fn == 'relu':
+#             activation = nn.ReLU(inplace=True)
+#         elif activation_fn == 'leakyrelu':
+#             activation = nn.LeakyReLU(inplace=True, negative_slope=activation_slope)
+#         elif activation_fn == 'tanh':
+#             activation = nn.Tanh()
+#         else:
+#             raise NotImplementedError('Check activation_fn.')
+#
+#         # Define network architecture.
+#         modules = [nn.Linear(input_size, hidden_size)] + batch_norm * [nn.BatchNorm1d(hidden_size)]
+#         for _ in range(n_hidden):
+#             # Add dropout.
+#             if dropout:
+#                 modules += [nn.Dropout(dropout_p)]
+#             # Add act and layer.
+#             if res_block:
+#                 modules += [activation, ResidualBlock(hidden_size, hidden_size, activation, False, batch_norm)]
+#             else:
+#                 modules += [activation, nn.Linear(hidden_size, hidden_size)]
+#             # Add batchnorm.
+#             modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+#         if dropout:
+#             modules += [nn.Dropout(dropout_p)]
+#         modules += [activation, nn.Linear(hidden_size, 1)]
+#         self.model = nn.Sequential(*modules)
+#         self.init_method = init_method
+#         self.model.apply(self.__init)
+#
+#     def forward(self, x):
+#         return self.model(x)
+#
+#     def __init(self, m):
+#         classname = m.__class__.__name__
+#
+#         if self.init_method == 'default':
+#             return
+#         elif self.init_method == 'xav_u':
+#             if classname.find('Linear') != -1:
+#                 nn.init.xavier_uniform_(m.weight, gain=1)
+#         else:
+#             raise NotImplementedError('Check init_method')
+
+# class Critic(nn.Module):
+#     def __init__(self, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
+#                  spect_norm=True, batch_norm=False, res_block=False, dropout=False, dropout_p=0.5):
+#         super().__init__()
+#         # Define activation function.
+#         if activation_fn == 'relu':
+#             activation = nn.ReLU(inplace=True)
+#         elif activation_fn == 'leakyrelu':
+#             activation = nn.LeakyReLU(inplace=True, negative_slope=activation_slope)
+#         elif activation_fn == 'tanh':
+#             activation = nn.Tanh()
+#         else:
+#             raise NotImplementedError('Check activation_fn.')
+#
+#         # Define network architecture.
+#         modules = [spectral_norm(nn.Linear(1, hidden_size)) if spect_norm else nn.Linear(1, hidden_size)]
+#         modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+#         for _ in range(n_hidden):
+#             if dropout:
+#                 modules += [nn.Dropout(dropout_p)]
+#
+#             modules += [activation]
+#             if res_block:
+#                 modules += [ResidualBlock(hidden_size, hidden_size, activation, spect_norm, batch_norm)]
+#             else:
+#                 modules += [spectral_norm(nn.Linear(hidden_size, hidden_size)) if spect_norm else nn.Linear(hidden_size, hidden_size)]
+#             modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+#         if dropout:
+#             modules += [nn.Dropout(dropout_p)]
+#         modules += [activation]
+#         modules += [spectral_norm(nn.Linear(hidden_size, 1)) if spect_norm else nn.Linear(hidden_size, 1)]
+#         self.model = nn.Sequential(*modules)
+#         self.init_method = init_method
+#         self.model.apply(self.__init)
+#
+#     def forward(self, x):
+#         return self.model(x)
+#
+#     def __init(self, m):
+#         classname = m.__class__.__name__
+#
+#         if self.init_method == 'default':
+#             return
+#         elif self.init_method == 'xav_u':
+#             if classname.find('Linear') != -1:
+#                 nn.init.xavier_uniform_(m.weight, gain=1)
+#         else:
+#             raise NotImplementedError('Check init_method')
 
 
 class Generator(nn.Module):
     def __init__(self, input_size, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
-                 batch_norm=True, res_block=False):
+                 norm='batch', res_block=False, dropout=False, dropout_p=0.5):
         super().__init__()
         # Define activation function.
         if activation_fn == 'relu':
@@ -125,15 +207,29 @@ class Generator(nn.Module):
         else:
             raise NotImplementedError('Check activation_fn.')
 
-        # Define network architecture.
-        modules = [nn.Linear(input_size, hidden_size)] + batch_norm * [nn.BatchNorm1d(hidden_size)]
+        if norm == 'batch':
+            norm = nn.BatchNorm1d
+        elif norm == 'layer':
+            norm = nn.LayerNorm
+        else:
+            norm = None
+
+        modules = [nn.Linear(input_size, hidden_size), norm(hidden_size)] if norm else [nn.Linear(input_size, hidden_size)]
         for _ in range(n_hidden):
+            # Add dropout.
+            if dropout:
+                modules += [nn.Dropout(dropout_p)]
+            # Add act and layer.
             if res_block:
-                modules += [activation, ResidualBlock(hidden_size, hidden_size, activation, False, batch_norm)]
+                modules += [activation, ResidualBlock(hidden_size, hidden_size, activation, False, norm)]
             else:
                 modules += [activation, nn.Linear(hidden_size, hidden_size)]
-            modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+            if norm:
+                modules += [norm(hidden_size)]
+        if dropout:
+            modules += [nn.Dropout(dropout_p)]
         modules += [activation, nn.Linear(hidden_size, 1)]
+
         self.model = nn.Sequential(*modules)
         self.init_method = init_method
         self.model.apply(self.__init)
@@ -155,7 +251,7 @@ class Generator(nn.Module):
 
 class Critic(nn.Module):
     def __init__(self, n_hidden, hidden_size, activation_fn, activation_slope, init_method,
-                 spect_norm=True, batch_norm=False, res_block=False):
+                 spect_norm=True, norm='layer', res_block=False, dropout=False, dropout_p=0.5):
         super().__init__()
         # Define activation function.
         if activation_fn == 'relu':
@@ -167,18 +263,30 @@ class Critic(nn.Module):
         else:
             raise NotImplementedError('Check activation_fn.')
 
-        # Define network architecture.
+        if norm == 'layer':
+            norm = nn.LayerNorm
+        else:
+            norm = None
+
         modules = [spectral_norm(nn.Linear(1, hidden_size)) if spect_norm else nn.Linear(1, hidden_size)]
-        modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+        if norm:
+            modules +=  [norm(hidden_size)]
         for _ in range(n_hidden):
-            modules += [activation]
+            # Add dropout.
+            if dropout:
+                modules += [nn.Dropout(dropout_p)]
+            # Add act and layer.
             if res_block:
-                modules += [ResidualBlock(hidden_size, hidden_size, activation, spect_norm, batch_norm)]
+                modules += [activation, ResidualBlock(hidden_size, hidden_size, activation, spect_norm, norm)]
             else:
                 modules += [spectral_norm(nn.Linear(hidden_size, hidden_size)) if spect_norm else nn.Linear(hidden_size, hidden_size)]
-            modules += batch_norm * [nn.BatchNorm1d(hidden_size)]
+            if norm:
+                modules += [norm(hidden_size)]
+        if dropout:
+            modules += [nn.Dropout(dropout_p)]
         modules += [activation]
         modules += [spectral_norm(nn.Linear(hidden_size, 1)) if spect_norm else nn.Linear(hidden_size, 1)]
+
         self.model = nn.Sequential(*modules)
         self.init_method = init_method
         self.model.apply(self.__init)
@@ -201,20 +309,33 @@ class Critic(nn.Module):
 class WGANTrainer(tune.Trainable):
     def _setup(self, config):
         self.config = config
-        self.prior = torch.randn() if self.config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
+        self.prior = torch.randn if self.config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
         self.i = 0
         # model
+        # self.generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'],
+        #              hidden_size=config['hidden_size'],
+        #              activation_slope=config['activation_slope'], init_method=config['init_method'],
+        #              activation_fn=config['activation_fn'], batch_norm=config['batch_norm'],
+        #              res_block=config['residual_block'], dropout=config['dropout']).to(config['device'])
+        #
+        # self.critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
+        #             activation_slope=config['activation_slope'], init_method=config['init_method'],
+        #             activation_fn=config['activation_fn'], batch_norm=False,
+        #             res_block=config['residual_block'], dropout=config['dropout'],
+        #             spect_norm=config['spect_norm']).to(config['device'])
+
         self.generator = Generator(input_size=config['prior_size'], n_hidden=config['n_hidden'],
                      hidden_size=config['hidden_size'],
                      activation_slope=config['activation_slope'], init_method=config['init_method'],
-                     activation_fn=config['activation_fn'], batch_norm=config['batch_norm'],
-                     res_block=config['residual_block']).to(config['device'])
+                     activation_fn=config['activation_fn'], norm=config['norm'],
+                     res_block=config['residual_block'], dropout=config['dropout']).to(config['device'])
 
         self.critic = Critic(n_hidden=config['n_hidden'], hidden_size=config['hidden_size'],
                     activation_slope=config['activation_slope'], init_method=config['init_method'],
-                    activation_fn=config['activation_fn'], batch_norm=False,
-                    res_block=config['residual_block'],
+                    activation_fn=config['activation_fn'], norm=config['norm'],
+                    res_block=config['residual_block'], dropout=config['dropout'],
                     spect_norm=config['spect_norm']).to(config['device'])
+
         # data
         if self.config['gu_num'] == 8:
             self.dataloader = GausUniffMixture(n_mixture=self.config['gu_num'], mean_dist=10, sigma=2, unif_intsect=1.5,
@@ -389,6 +510,28 @@ if __name__ == '__main__':
     else:
         args.device = torch.device(f'cuda:{args.cuda}' if torch.cuda.is_available() else 'cpu')
 
+    if args.auto_full:
+        config = {
+            'prior': tune.choice(['uniform', 'gaussian']),
+            'prior_size': tune.choice([1, 3, 5, 7]),
+            'hidden_size': tune.choice([64, 128, 256, 512]),
+            'n_hidden': tune.choice([1, 2, 3, 4]),
+            'activation_slope': 1e-2,
+            'activation_fn': tune.choice(['relu', 'leakyrelu', 'tanh']),
+            'init_method': tune.choice(['default', 'xav_u']),
+
+            'lr': tune.choice([1e-5, 5e-5, 1e-4, 5e-4, 1e-3]),
+            'weight_decay': tune.choice([0., 1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 1e-3]),
+            'beta1': tune.choice([0.5, 0.6, 0.7, 0.8, 0.9]),
+            'beta2': tune.choice([0.7, 0.8, 0.9, 0.999]),
+
+            'clr': tune.choice([1, 0]),
+            'spect_norm': tune.choice([1, 0]),
+            # 'batch_norm': tune.choice([1, 0]),
+            'norm': tune.choice(['batch', 'layer', None]),
+            'dropout': tune.choice([1, 0]),
+        }
+
     # Add constant params in args to config.
     dict_args = vars(args)
     for key in dict_args:
@@ -419,6 +562,8 @@ if __name__ == '__main__':
                   args.eval_real * 'w_distance_real|' + (not args.eval_real) * 'w_distance_estimated|' + \
                  'resnt|' * args.residual_block + 'fcnet|' * (not args.residual_block) + \
                  f'{args.prior}|' + \
+                 f'clr|' * args.clr + \
+                 f'dropout|' * args.dropout + \
                  f'{args.activation_fn}|' * (not args.auto) + \
                  ('no_' * args.no_batch_norm + 'batch_norm|') * (not args.auto) + \
                  ('no_' * args.no_spectral_norm + 'spect_norm|') * (not args.auto) + \
@@ -427,6 +572,11 @@ if __name__ == '__main__':
 
     model_path = os.path.join(curPath, search_type, 'models', experiment)
     image_path = os.path.join(curPath, search_type, 'images', experiment)
+
+    if args.auto_full:
+        model_path = os.path.join(curPath, search_type, 'models/gu{args.gu_num}/wgan/{args.niters}', 'full_new')
+        image_path = os.path.join(curPath, search_type, 'images/gu{args.gu_num}/wgan/{args.niters}', 'full_new')
+
     makedirs(model_path, image_path)
 
     log_path = model_path + '/logs'
@@ -481,8 +631,8 @@ if __name__ == '__main__':
 
         best_config = config
         best_model_dir = model_path
-        # logger.info(f'Saving to {model_path}')
-        # trainer._save_whole(model_path)
+        logger.info(f'Saving to {model_path}')
+        trainer._save(model_path)
 
     logger.info('Start evaluation...')
 
