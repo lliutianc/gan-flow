@@ -40,7 +40,7 @@ parser.add_argument('--activation_fn', type=str, choices=['relu', 'leakyrelu', '
 parser.add_argument('--activation_slope', type=float, default=1e-2, help='Negative slope of LeakyReLU activation function.')
 
 parser.add_argument('--no_spectral_norm', action='store_true', help='Do not use spectral normalization in critic.')
-parser.add_argument('--no_batch_norm', action='store_true', help='Do not use batch norm')
+# parser.add_argument('--no_batch_norm', action='store_true', help='Do not use batch norm')
 parser.add_argument('--residual_block', action='store_true', help='Use residual block')
 parser.add_argument('--dropout', action='store_true', help='Use dropout')
 parser.add_argument('--norm', type=str, choices=['layer', 'batch', None], default='batch', help='Which normaliztion to be used.')
@@ -70,8 +70,8 @@ parser.add_argument('--log_interval', type=int, default=1000, help='How often to
 
 config = {
     # 'prior': tune.choice(['uniform', 'gaussian']),
-    'prior_size': tune.choice([1, 3, 5, 7]),
-    'hidden_size': tune.choice([64, 128, 256, 512]),
+    'prior_size': tune.choice([1, 3, 5]),
+    'hidden_size': tune.choice([64, 128, 256]),
     'n_hidden': tune.choice([1, 2, 3, 4]),
     'activation_slope': 1e-2,
     'activation_fn': tune.choice(['relu', 'leakyrelu', 'tanh']),
@@ -82,16 +82,18 @@ config = {
     'beta1': tune.choice([0.5, 0.6, 0.7, 0.8, 0.9]),
     'beta2': tune.choice([0.7, 0.8, 0.9, 0.999]),
 
+    # In auto_full, these are not used
     'clr_scale': tune.choice([2, 3, 4, 5]),
     'clr_size_up': tune.choice([2000, 4000, 6000, 8000]),
+
     'k': tune.choice([1, 5, 10, 50, 100]),
     'l': tune.choice([0, 1e-2, 1e-1, 1, 10]),
 
-    # 'spect_norm': tune.choice([1, 0]),
-    # 'clr': tune.choice([1, 0]),
+    # 'norm': tune.choice(['batch', 'layer', None]),
+    'norm': tune.choice(['batch', None]),
     'spect_norm': tune.choice([1, 0]),
-    'batch_norm': tune.choice([1, 0]),
-    # 'dropout': tune.choice([1, 0]),
+    # 'dropout': None,
+    # 'clr': None,
 }
 
 
@@ -351,6 +353,7 @@ class WGANTrainer(tune.Trainable):
         self.optim_c = torch.optim.Adam([p for p in self.critic.parameters() if p.requires_grad],
                                         lr=config['lr'], betas=(config['beta1'], config['beta2']),
                                         weight_decay=config['weight_decay'])
+
         if self.config['clr']:
             self.sche_g = torch.optim.lr_scheduler.CyclicLR(self.optim_g, base_lr=config['lr'] / config['clr_scale'],
                                                             max_lr=config['lr'], step_size_up=config['clr_size_up'],
@@ -503,7 +506,6 @@ class WGANTrainer(tune.Trainable):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    args.batch_norm = not args.no_batch_norm
     args.spect_norm = not args.no_spectral_norm
     if args.auto:
         args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -511,10 +513,11 @@ if __name__ == '__main__':
         args.device = torch.device(f'cuda:{args.cuda}' if torch.cuda.is_available() else 'cpu')
 
     if args.auto_full:
+        # Search over all tweaks, but don't search over clr parameters.
         config = {
             'prior': tune.choice(['uniform', 'gaussian']),
-            'prior_size': tune.choice([1, 3, 5, 7]),
-            'hidden_size': tune.choice([64, 128, 256, 512]),
+            'prior_size': tune.choice([1, 3, 5]),
+            'hidden_size': tune.choice([64, 128, 256]),
             'n_hidden': tune.choice([1, 2, 3, 4]),
             'activation_slope': 1e-2,
             'activation_fn': tune.choice(['relu', 'leakyrelu', 'tanh']),
@@ -525,36 +528,37 @@ if __name__ == '__main__':
             'beta1': tune.choice([0.5, 0.6, 0.7, 0.8, 0.9]),
             'beta2': tune.choice([0.7, 0.8, 0.9, 0.999]),
 
-            'clr': tune.choice([1, 0]),
+            'k': tune.choice([1, 5, 10, 50, 100]),
+            'l': tune.choice([0, 1e-2, 1e-1, 1, 10]),
+
             'spect_norm': tune.choice([1, 0]),
-            # 'batch_norm': tune.choice([1, 0]),
-            'norm': tune.choice(['batch', 'layer', None]),
+            # 'norm': tune.choice(['batch', 'layer', None]),
+            'norm': tune.choice(['batch', None]),
             'dropout': tune.choice([1, 0]),
+            'clr': tune.choice([1, 0]),
         }
 
     # Add constant params in args to config.
     dict_args = vars(args)
     for key in dict_args:
-        if key in ['no_batch_norm', 'no_spectral_norm']:
+        if key in ['no_batch_norm', 'no_spectral_norm', 'batch_norm']:
+            # redundant args.
             continue
         if key in config:
             if not args.auto:
+                # In Manual experiment: overwrite existed config settings.
                 config[key] = dict_args[key]
         else:
             config[key] = dict_args[key]
 
-    # print(config)
     if args.auto:
-        # Reset hyperparameter in clr.
         if not args.clr:
+            # Reset hyperparameter choices in clr if it is not a tuning field.
             config["clr_scale"] = 2
             config["clr_size_up"] = 2000
-        # Set deeper depth of resnet.
         if args.residual_block:
+            # Set deeper depth of Resnet.
             config["n_hidden"] = tune.choice([1, 3, 5, 7])
-
-    # print(config)
-    # exit(1)
 
     # save path
     search_type = 'automatic' if args.auto else 'manual'
@@ -565,7 +569,7 @@ if __name__ == '__main__':
                  f'clr|' * args.clr + \
                  f'dropout|' * args.dropout + \
                  f'{args.activation_fn}|' * (not args.auto) + \
-                 ('no_' * args.no_batch_norm + 'batch_norm|') * (not args.auto) + \
+                 f'{args.norm}_norm|' * (not args.auto) + \
                  ('no_' * args.no_spectral_norm + 'spect_norm|') * (not args.auto) + \
                  ('no_' * (args.l != 0) + 'gradient_penalty|') * (not args.auto) + \
                  f'{args.init_method}_init|{args.k}_updates' * (not args.auto)
@@ -574,14 +578,19 @@ if __name__ == '__main__':
     image_path = os.path.join(curPath, search_type, 'images', experiment)
 
     if args.auto_full:
-        model_path = os.path.join(curPath, search_type, 'models/gu{args.gu_num}/wgan/{args.niters}', 'full_new')
-        image_path = os.path.join(curPath, search_type, 'images/gu{args.gu_num}/wgan/{args.niters}', 'full_new')
+        model_path = os.path.join(curPath, search_type, f'models/gu{args.gu_num}/wgan/{args.niters}|full_new')
+        image_path = os.path.join(curPath, search_type, f'images/gu{args.gu_num}/wgan/{args.niters}|full_new')
 
     makedirs(model_path, image_path)
 
     log_path = model_path + '/logs'
     logger = get_logger(log_path)
 
+    logger.info('Trained model will save to: ' + model_path)
+    logger.info('Result plot will save to : ' + image_path)
+    logger.info('Search space: ')
+    logger.info(config)
+    logger.info(SEP)
     logger.info('Start training...')
 
     if args.auto:
@@ -589,11 +598,9 @@ if __name__ == '__main__':
         if args.eval_real:
             sched = ASHAScheduler(metric='w_distance_real', mode='min',
                                   grace_period=args.niters // 10, max_t=args.niters, time_attr="iteration")
-            # algo = HyperOptSearch(config, metric="w_distance_real", mode="min", max_concurrent=10, random_state_seed=1)
         else:
             sched = ASHAScheduler(metric='w_distance_estimated', mode='min',
                                   grace_period=args.niters // 10, max_t=args.niters, time_attr="iteration")
-            # algo = HyperOptSearch(config, metric="w_distance_estimated", mode="min", max_concurrent=10, random_state_seed=1)
         analysis = tune.run(
             WGANTrainer,
             name=experiment,
@@ -614,7 +621,6 @@ if __name__ == '__main__':
 
         results = analysis.dataframe()
 
-        import pandas as pd
         if args.eval_real:
             results.to_csv(model_path + f'results.csv')
         else:
@@ -622,9 +628,16 @@ if __name__ == '__main__':
 
         logger.info(f'Best config is: {best_config}')
         best_model_dir = retrieve_best_result_from_tune(best_path)
-        # logger.info(f'Saving to {model_path}')
-        # save_best_result_from_tune(best_model_dir, model_path)
+
     else:
+        # config = { 'activation_fn': 'relu', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 1, 'batch_size': 2048,
+        #            'beta1': 0.6, 'beta2': 0.999, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
+        #            'device': 'cuda', 'eval_real': True, 'eval_size': 100000, 'exp_num': 100, 'gu_num': 8,
+        #            'hidden_size': 256, 'init_method': 'default', 'k': 100, 'l': 0.0, 'log_interval': 1000, 'lr': 0.0005,
+        #            'n_hidden': 4, 'niters': 50000, 'prior': 'gaussian', 'prior_size': 1, 'residual_block': False,
+        #            'seed': 1, 'spect_norm': 1, 'weight_decay': 1e-06, 'norm': 'batch', 'dropout': 0
+        #            }
+
         trainer = WGANTrainer(config)
         for _ in range(1, config['niters'] + 1):
             _ = trainer._train()
@@ -639,6 +652,9 @@ if __name__ == '__main__':
     eval_trainer = WGANTrainer(best_config)
     eval_trainer._restore(best_model_dir)
     eval_trainer._evaluate(display=True, niter=args.niters)
+
+    logger.info('Saving to: ' + model_path)
     eval_trainer._save_whole(model_path)
 
     logger.info('Finish All...')
+    logger.info(SEP)

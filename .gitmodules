@@ -4,3 +4,6 @@
 [submodule "ffjord"]
 	path = ffjord
 	url = git@github.com:lliutianc/ffjord.git
+[submodule "Gaussianization_Flows"]
+	path = Gaussianization_Flows
+	url = git@github.com:lliutianc/Gaussianization_Flows.git

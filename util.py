@@ -6,9 +6,11 @@ from scipy.stats import wasserstein_distance
 import numpy as np
 
 
+SEP = '*' * 150
+
 # constant variables in plotting.
-FONTSIZE = 100
-FIG_W, FIG_H = 40, 30
+FONTSIZE = 130
+FIG_W, FIG_H = 38, 40
 
 def w_distance(real_tensor, fake_tensor):
     real = real_tensor.cpu().data.numpy().squeeze()

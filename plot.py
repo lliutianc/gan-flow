@@ -278,7 +278,7 @@ def plot_together(data, wgan_config=None):
     plt.close()
 
 
-def plot_separately(data, wgan_config=None, kde_num=500):
+def plot_separately(data, wgan_config=None, kde_num=500, labels=['a', 'b', 'c', 'd'], rounds_num=2, xrange=(4,6)):
     config = wgan_config
 
     if data == 'gum':
@@ -306,6 +306,11 @@ def plot_separately(data, wgan_config=None, kde_num=500):
 
     # maf
     prior = maf.base_dist.sample((eval_size,)).to(device)
+    # zk, inds = [], torch.arange(0, prior.shape[0]).to(torch.int64)
+    # for ii in torch.split(inds, int(1000)):
+    #     zk.append(maf.inverse(prior[ii]))
+    # fake = torch.cat(zk, 0)
+
     fake, _ = maf.inverse(prior)
     fake = fake[:, 0]
     w_distance_maf = w_distance(real, fake)
@@ -332,9 +337,55 @@ def plot_separately(data, wgan_config=None, kde_num=500):
 
 
     plt.cla()
-    fig = plt.figure(figsize=(FIG_W, FIG_H * 2.7))
+    fig = plt.figure(figsize=(FIG_W, FIG_H * 4))
 
-    ax = fig.add_subplot(311)
+    ax = fig.add_subplot(411)
+    # fig.subplots_adjust(top=1.2)
+    ax.set_title(f'({labels[0]})', fontsize=FONTSIZE * 1.5)
+
+    ax.set_facecolor('whitesmoke')
+    ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+
+    # ax.spines["top"].set_linewidth(6)
+    # ax.spines["bottom"].set_linewidth(6)
+    # ax.spines["right"].set_linewidth(6)
+    # ax.spines["left"].set_linewidth(6)
+
+    # wgan
+    # min_value, max_value = min(fake_ffjord), max(fake_ffjord)
+    # kde_width = kde_num * (max_value - min_value) / eval_size
+    # sns.kdeplot(fake_wgan, bw=kde_width, label=f'WGAN ({w_distance_wgan}, ({w_distance_est}))', color='coral', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+    # sns.kdeplot(fake_wgan, bw=kde_width, color='coral', shade=False, linewidth=12, ax=ax)
+
+    # real data
+    min_value, max_value = min(real_sample), max(real_sample)
+    kde_width = kde_num * (max_value - min_value) / eval_size
+    sns.kdeplot(real_sample, bw=kde_width, color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='darkgreen', shade=False, linewidth=20, ax=ax)
+
+    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.7)
+    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.7, direction='in')
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.7, fancybox=True, shadow=True,
+              ncol=5)
+    ax.set_xlim(xrange)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    start, end = ax.get_ylim()
+    jump = (end - start) / y_num
+    ax.yaxis.set_ticks(np.round(np.arange(start, end, jump), rounds_num))
+
+
+
+    ax = fig.add_subplot(412)
+    # fig.subplots_adjust(top=1.2)
+    ax.set_title(f'({labels[1]})', fontsize=FONTSIZE * 1.5)
+
     ax.set_facecolor('whitesmoke')
     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
 
@@ -357,20 +408,26 @@ def plot_separately(data, wgan_config=None, kde_num=500):
     # real data
     min_value, max_value = min(real_sample), max(real_sample)
     kde_width = kde_num * (max_value - min_value) / eval_size
-    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
-    sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+    # sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='darkgreen', shade=False, linewidth=20, ax=ax)
 
-    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.5)
-    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.5, direction='in')
+    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.7)
+    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.7, direction='in')
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True,
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.7, fancybox=True, shadow=True,
               ncol=5)
-    ax.set_ylabel('WGAN', fontsize=FONTSIZE * 0.6)
-    # ax.set_title('WGAN')
+    ax.set_xlim(xrange)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    start, end = ax.get_ylim()
+    jump = (end - start) / y_num
+    ax.yaxis.set_ticks(np.round(np.arange(start, end, jump), rounds_num))
 
     # maf
-    ax = fig.add_subplot(312)
+    ax = fig.add_subplot(413)
+    # fig.subplots_adjust(top=1.2)
+    ax.set_title(f'({labels[2]})', fontsize=FONTSIZE * 1.5)
+
     ax.set_facecolor('whitesmoke')
     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
 
@@ -394,21 +451,26 @@ def plot_separately(data, wgan_config=None, kde_num=500):
     # real data
     min_value, max_value = min(real_sample), max(real_sample)
     kde_width = kde_num * (max_value - min_value) / eval_size
-    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
-    sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+    # sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='darkgreen', shade=False, linewidth=20, ax=ax)
 
-    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.5)
-    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.5, direction='in')
+    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.7)
+    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.7, direction='in')
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True,
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.7, fancybox=True, shadow=True,
               ncol=5)
-    ax.set_ylabel('MAF', fontsize=FONTSIZE * 0.6)
-    # ax.set_title('MAF')
+    ax.set_xlim(xrange)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    start, end = ax.get_ylim()
+    jump = (end - start) / y_num
+    ax.yaxis.set_ticks(np.round(np.arange(start, end, jump), rounds_num))
 
 
     # ffjord
-    ax = fig.add_subplot(313)
+    ax = fig.add_subplot(414)
+    # fig.subplots_adjust(top=1.2)
+    ax.set_title(f'({labels[3]})', fontsize=FONTSIZE * 1.5)
 
     ax.set_facecolor('whitesmoke')
     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
@@ -432,15 +494,20 @@ def plot_separately(data, wgan_config=None, kde_num=500):
     # real data
     min_value, max_value = min(real_sample), max(real_sample)
     kde_width = kde_num * (max_value - min_value) / eval_size
-    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
-    sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+    # sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+    sns.kdeplot(real_sample, bw=kde_width, label='Data', color='darkgreen', shade=False, linewidth=20, ax=ax)
 
-    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.5)
-    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.5, direction='in')
+    ax.tick_params(axis='x', labelsize=FONTSIZE * 0.7)
+    ax.tick_params(axis='y', labelsize=FONTSIZE * 0.7, direction='in')
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 + box.height * 0.1,box.width, box.height * 0.9])
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True, ncol=5)
-    ax.set_ylabel('FFJORD', fontsize=FONTSIZE * 0.6)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.7, fancybox=True, shadow=True, ncol=5)
+    ax.set_xlim(xrange)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    start, end = ax.get_ylim()
+    jump = (end - start) / y_num
+    ax.yaxis.set_ticks(np.round(np.arange(start, end, jump), rounds_num))
+
 
     cur_img_path = os.path.join(model_path, data + '.jpg')
     # fig.text(0.04, 0.5, 'Estimated Density by KDE', va='center', rotation='vertical')
@@ -456,17 +523,232 @@ def plot_separately(data, wgan_config=None, kde_num=500):
     plt.savefig(cur_img_path)
     plt.close()
 
+#
+# def plot_separately(data, wgan_config=None, kde_num=500):
+#     config = wgan_config
+#
+#     if data == 'gum':
+#         dataloader = GausUniffMixture(n_mixture=1, mean_dist=5, sigma=0.1, unif_intsect=5, unif_ratio=3, device=device,
+#                                 seed=2020, extend_dim=False)
+#     else:
+#         dataloader = GausUniffMixture(n_mixture=8, mean_dist=10, sigma=2, unif_intsect=1.5, unif_ratio=1., device=device,
+#                                 seed=2020, extend_dim=False)
+#
+#     model_path = os.path.join(curPath, 'models_to_plot', data)
+#
+#     # Load maf
+#     maf = torch.load(model_path + '/maf.pth', map_location=device)
+#
+#     # Load ffjord
+#     ffjord = torch.load(model_path + '/ffjord.pth', map_location=device)
+#
+#     # Load wgan
+#     generator = torch.load(model_path + '/generator.pth', map_location=device)
+#     critic = torch.load(model_path + '/critic.pth', map_location=device)
+#
+#
+#     real = dataloader.get_sample(eval_size)
+#     real_sample = real.cpu().data.numpy().squeeze()
+#
+#     # maf
+#     prior = maf.base_dist.sample((eval_size,)).to(device)
+#     fake, _ = maf.inverse(prior)
+#     fake = fake[:, 0]
+#     w_distance_maf = w_distance(real, fake)
+#     fake_maf = fake.cpu().data.numpy().squeeze()
+#
+#     # ffjord
+#     sample_fn, density_fn = gu_ffjord.get_transforms(ffjord)
+#     z = torch.randn(eval_size, 1).type(torch.float32).to(device)
+#     zk, inds = [], torch.arange(0, z.shape[0]).to(torch.int64)
+#     for ii in torch.split(inds, int(10000)):
+#         zk.append(sample_fn(z[ii]))
+#     fake = torch.cat(zk, 0)
+#     w_distance_ffjord = w_distance(real, fake)
+#     fake_ffjord = fake.cpu().data.numpy().squeeze()
+#
+#     # wgan
+#     prior = torch.randn() if config['prior'] == 'uniform' else partial(torch.normal, mean=0., std=1.)
+#     z = prior(size=(eval_size, config['prior_size']), device=device)
+#     fake = generator(z)
+#     w_distance_est = critic(real).mean() - critic(fake).mean()
+#     w_distance_est = abs(round(w_distance_est.item(), 4))
+#     w_distance_wgan = w_distance(real, fake)
+#     fake_wgan = fake.cpu().data.numpy().squeeze()
+#
+#
+#     plt.cla()
+#     fig = plt.figure(figsize=(FIG_W, FIG_H * 2.7))
+#
+#     ax = fig.add_subplot(411)
+#     ax.set_facecolor('whitesmoke')
+#     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
+#
+#     ax.spines["top"].set_visible(False)
+#     ax.spines["bottom"].set_visible(False)
+#     ax.spines["right"].set_visible(False)
+#     ax.spines["left"].set_visible(False)
+#
+#     # ax.spines["top"].set_linewidth(6)
+#     # ax.spines["bottom"].set_linewidth(6)
+#     # ax.spines["right"].set_linewidth(6)
+#     # ax.spines["left"].set_linewidth(6)
+#
+#     # wgan
+#     # min_value, max_value = min(fake_ffjord), max(fake_ffjord)
+#     # kde_width = kde_num * (max_value - min_value) / eval_size
+#     # sns.kdeplot(fake_wgan, bw=kde_width, label=f'WGAN ({w_distance_wgan}, ({w_distance_est}))', color='coral', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     # sns.kdeplot(fake_wgan, bw=kde_width, color='coral', shade=False, linewidth=12, ax=ax)
+#
+#     # real data
+#     min_value, max_value = min(real_sample), max(real_sample)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     # sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+#
+#     ax.tick_params(axis='x', labelsize=FONTSIZE * 0.7)
+#     ax.tick_params(axis='y', labelsize=FONTSIZE * 0.7, direction='in')
+#     box = ax.get_position()
+#     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+#     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True,
+#               ncol=5)
+#     pylab.xlim([4, 6])
+#     # ax.set_ylabel('WGAN', fontsize=FONTSIZE * 0.6)
+#     # ax.set_title('WGAN')
+#
+#     ax = fig.add_subplot(311)
+#     ax.set_facecolor('whitesmoke')
+#     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
+#
+#     ax.spines["top"].set_visible(False)
+#     ax.spines["bottom"].set_visible(False)
+#     ax.spines["right"].set_visible(False)
+#     ax.spines["left"].set_visible(False)
+#
+#     # ax.spines["top"].set_linewidth(6)
+#     # ax.spines["bottom"].set_linewidth(6)
+#     # ax.spines["right"].set_linewidth(6)
+#     # ax.spines["left"].set_linewidth(6)
+#
+#     # wgan
+#     min_value, max_value = min(fake_ffjord), max(fake_ffjord)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(fake_wgan, bw=kde_width, label=f'WGAN ({w_distance_wgan}, ({w_distance_est}))', color='coral', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     sns.kdeplot(fake_wgan, bw=kde_width, color='coral', shade=False, linewidth=12, ax=ax)
+#
+#     # real data
+#     min_value, max_value = min(real_sample), max(real_sample)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+#
+#     ax.tick_params(axis='x', labelsize=FONTSIZE * 0.5)
+#     ax.tick_params(axis='y', labelsize=FONTSIZE * 0.5, direction='in')
+#     box = ax.get_position()
+#     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+#     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True,
+#               ncol=5)
+#     ax.set_ylabel('WGAN', fontsize=FONTSIZE * 0.6)
+#     # ax.set_title('WGAN')
+#
+#     # maf
+#     ax = fig.add_subplot(312)
+#     ax.set_facecolor('whitesmoke')
+#     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
+#
+#     ax.spines["top"].set_visible(False)
+#     ax.spines["bottom"].set_visible(False)
+#     ax.spines["right"].set_visible(False)
+#     ax.spines["left"].set_visible(False)
+#
+#     # ax.set_facecolor('white')
+#     # ax.grid(True, color='whitesmoke', linewidth=2)
+#     # ax.spines["top"].set_linewidth(6)
+#     # ax.spines["bottom"].set_linewidth(6)
+#     # ax.spines["right"].set_linewidth(6)
+#     # ax.spines["left"].set_linewidth(6)
+#
+#     min_value, max_value = min(fake_maf), max(fake_maf)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(fake_maf, bw=kde_width, label=f'MAF ({w_distance_maf})', color='coral', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     sns.kdeplot(fake_maf, bw=kde_width, color='coral', shade=False, linewidth=12, ax=ax)
+#
+#     # real data
+#     min_value, max_value = min(real_sample), max(real_sample)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+#
+#     ax.tick_params(axis='x', labelsize=FONTSIZE * 0.5)
+#     ax.tick_params(axis='y', labelsize=FONTSIZE * 0.5, direction='in')
+#     box = ax.get_position()
+#     ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+#     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True,
+#               ncol=5)
+#     ax.set_ylabel('MAF', fontsize=FONTSIZE * 0.6)
+#     # ax.set_title('MAF')
+#
+#
+#     # ffjord
+#     ax = fig.add_subplot(313)
+#
+#     ax.set_facecolor('whitesmoke')
+#     ax.grid(True, color='white', linewidth=3,linestyle='--', alpha=shade_alpha)
+#     ax.spines["top"].set_visible(False)
+#     ax.spines["bottom"].set_visible(False)
+#     ax.spines["right"].set_visible(False)
+#     ax.spines["left"].set_visible(False)
+#
+#     # ax.set_facecolor('white')
+#     # ax.grid(True, color='whitesmoke', linewidth=2)
+#     # ax.spines["top"].set_linewidth(6)
+#     # ax.spines["bottom"].set_linewidth(6)
+#     # ax.spines["right"].set_linewidth(6)
+#     # ax.spines["left"].set_linewidth(6)
+#
+#     min_value, max_value = min(fake_ffjord), max(fake_ffjord)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(fake_ffjord, bw=kde_width, label=f'FFJORD ({w_distance_ffjord})', color='coral', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     sns.kdeplot(fake_ffjord, bw=kde_width, color='coral', shade=False, linewidth=12, ax=ax)
+#
+#     # real data
+#     min_value, max_value = min(real_sample), max(real_sample)
+#     kde_width = kde_num * (max_value - min_value) / eval_size
+#     sns.kdeplot(real_sample, bw=kde_width, label='Data', color='green', shade=True, linewidth=12, alpha=shade_alpha, ax=ax)
+#     sns.kdeplot(real_sample, bw=kde_width, color='green', shade=False, linewidth=12, ax=ax)
+#
+#     ax.tick_params(axis='x', labelsize=FONTSIZE * 0.5)
+#     ax.tick_params(axis='y', labelsize=FONTSIZE * 0.5, direction='in')
+#     box = ax.get_position()
+#     ax.set_position([box.x0, box.y0 + box.height * 0.1,box.width, box.height * 0.9])
+#     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.5, fancybox=True, shadow=True, ncol=5)
+#     ax.set_ylabel('FFJORD', fontsize=FONTSIZE * 0.6)
+#
+#     cur_img_path = os.path.join(model_path, data + '.jpg')
+#     # fig.text(0.04, 0.5, 'Estimated Density by KDE', va='center', rotation='vertical')
+#     # plt.subplots_adjust(top=0.85)
+#
+#     # plt.tight_layout()
+#     # fig = ax.get_figure()
+#     # fig.suptitle(f'{data.upper()}. Model Name (True EM Distance, (Est. EM Distance))', fontsize=FONTSIZE * 0.7)
+#     # fig.tight_layout(h_pad=1., w_pad=1)
+#     # fig.subplots_adjust(top=0.95)
+#
+#     print('Saving to: ' + cur_img_path)
+#     plt.savefig(cur_img_path)
+#     plt.close()
 
 
 if __name__ == '__main__':
     eval_size = 100000
     shade_alpha = 0.3
     kde_num = 500
+    y_num = 5
 
     # plot_together('gum', gum_config)
     # plot_together('mgum', mgum_config)
 
-    plot_separately('gum', gum_config)
-    plot_separately('mgum', mgum_config)
+    plot_separately('gum', gum_config, rounds_num=1, xrange=(4,6))
+    plot_separately('mgum', mgum_config, labels=['e', 'f', 'g', 'h'], rounds_num=3, xrange=(0, 90))
 
     print('Finish All...')
