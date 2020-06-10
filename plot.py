@@ -262,7 +262,7 @@ def plot_together(data, wgan_config=None):
         dataloader = GausUniffMixture(n_mixture=8, mean_dist=10, sigma=2, unif_intsect=1.5, unif_ratio=1., device=device,
                                 seed=2020, extend_dim=False)
 
-    model_path = os.path.join(curPath, 'models_to_plot', data)
+    model_path = os.path.join(curPath, 'model_results', data)
 
     # Load maf
     maf = torch.load(model_path + '/maf.pth', map_location=device)
@@ -407,7 +407,7 @@ def plot_separately(data, wgan_config=None, kde_num=500, labels=['a', 'b', 'c', 
     real_range = np.arange (min_value, max_value, step)
     real_density = dataloader.density(real_range)
 
-    model_path = os.path.join(curPath, 'models_to_plot', data)
+    model_path = os.path.join(curPath, 'model_results', data)
 
     # Load maf
     # maf = torch.load(model_path + '/maf.pth', map_location=device)

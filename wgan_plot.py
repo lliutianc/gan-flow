@@ -117,7 +117,7 @@ def plot_separately( data, kde_num=500, labels=['a', 'b', 'c', 'd', 'e', 'f', 'g
         dataloader = GausUniffMixture(n_mixture=8, mean_dist=10, sigma=2, unif_intsect=1.5, unif_ratio=1.,
                                        device=device, seed=2020, extend_dim=False)
 
-    model_path = os.path.join(curPath, 'models_to_eval', data)
+    model_path = os.path.join(curPath, 'wgan_results', data)
 
     real = dataloader.get_sample(eval_size)
     real_sample = real.cpu().data.numpy().squeeze()
