@@ -272,7 +272,7 @@ class Critic(nn.Module):
 
         modules = [spectral_norm(nn.Linear(1, hidden_size)) if spect_norm else nn.Linear(1, hidden_size)]
         if norm:
-            modules +=  [norm(hidden_size)]
+            modules += [norm(hidden_size)]
         for _ in range(n_hidden):
             # Add dropout.
             if dropout:

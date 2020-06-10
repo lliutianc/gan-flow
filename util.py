@@ -10,7 +10,8 @@ SEP = '*' * 150
 
 # constant variables in plotting.
 FONTSIZE = 130
-FIG_W, FIG_H = 38, 40
+FIG_W, FIG_H = 38, 30
+
 
 def w_distance(real_tensor, fake_tensor):
     real = real_tensor.cpu().data.numpy().squeeze()
