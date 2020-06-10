@@ -26,14 +26,6 @@ import ffjord.gu_ffjord as gu_ffjord
 from Gaussianization_Flows.gu_gaus_flow import parser as gaus_flow_parser
 device = torch.device(f'cuda' if torch.cuda.is_available() else 'cpu')
 
-# gum_config = { 'activation_fn': 'tanh', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 1, 'batch_size': 2048,
-#                 'beta1': 0.8, 'beta2': 0.999, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
-#                 'device': 'cuda', 'eval_real': True, 'eval_size': 100000, 'exp_num': 100, 'gu_num': 1,
-#                 'hidden_size': 64, 'init_method': 'xav_u', 'k': 100, 'l': 0.01, 'log_interval': 1000, 'lr': 5e-05,
-#                 'n_hidden': 4, 'niters': 50000, 'no_batch_norm': False, 'no_spectral_norm': False, 'prior': 'gaussian',
-#                 'prior_size': 5, 'residual_block': False, 'seed': 1, 'smoke_test': False, 'spect_norm': 0,
-#                 'weight_decay': 0.0001
-#               }
 
 gum_config = { 'activation_fn': 'relu', 'activation_slope': 0.01, 'auto': True, 'batch_norm': 0, 'batch_size': 2048,
                'beta1': 0.5, 'beta2': 0.7, 'clr': False, 'clr_scale': 2, 'clr_size_up': 2000, 'cuda': 2,
@@ -501,7 +493,7 @@ def plot_separately(data, wgan_config=None, kde_num=500, labels=['a', 'b', 'c', 
               ncol=5)
     ax.set_xlim(xranges)
     ax.set_ylim(yranges)
-    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7, labelpad=labelpad)
     # start, end = ax.get_ylim()
     start, end = yranges
     jump = (end - start) / (y_num + 1)
@@ -547,7 +539,7 @@ def plot_separately(data, wgan_config=None, kde_num=500, labels=['a', 'b', 'c', 
               ncol=5)
     ax.set_xlim(xranges)
     ax.set_ylim(yranges)
-    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7, labelpad=labelpad)
     # start, end = ax.get_ylim()
     start, end = yranges
     jump = (end - start) / (y_num + 1)
@@ -636,7 +628,7 @@ def plot_separately(data, wgan_config=None, kde_num=500, labels=['a', 'b', 'c', 
     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), fontsize=FONTSIZE * 0.7, fancybox=True, shadow=True, ncol=5)
     ax.set_xlim(xranges)
     ax.set_ylim(yranges)
-    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7, labelpad=labelpad)
     # start, end = ax.get_ylim()
     start, end = yranges
     jump = (end - start) / (y_num + 1)
@@ -687,7 +679,7 @@ def plot_separately(data, wgan_config=None, kde_num=500, labels=['a', 'b', 'c', 
               ncol=5)
     ax.set_xlim(xranges)
     ax.set_ylim(yranges)
-    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7)
+    ax.set_ylabel('Density', fontsize=FONTSIZE * 0.7, labelpad=labelpad)
     # start, end = ax.get_ylim()
     start, end = yranges
     jump = (end - start) / (y_num + 1)
@@ -707,6 +699,8 @@ if __name__ == '__main__':
     shade_alpha = 0.3
     kde_num = 500
     y_num = 4
+    labelpad = 25
+
     vertical = False
     data_line = False
 

@@ -9,8 +9,8 @@ import numpy as np
 SEP = '*' * 150
 
 # constant variables in plotting.
-FONTSIZE = 130
-FIG_W, FIG_H = 38, 30
+FONTSIZE = 120
+FIG_W, FIG_H = 45, 30
 
 
 def w_distance(real_tensor, fake_tensor):
