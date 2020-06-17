@@ -18,7 +18,7 @@ Some important dependencies:
 - Matplotlib
 - Raytune
 
-Requirements contains the full list.
+`requirements.txt` contains the full list.
 
 ## Usage
 
