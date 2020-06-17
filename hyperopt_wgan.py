@@ -627,7 +627,7 @@ class WGANTrainer (tune.Trainable):
 if __name__ == '__main__':
     args = parser.parse_args()
     args.spect_norm = not args.no_spectral_norm
-    if args.auto:
+    if args.auto or args.auto_full:
         args.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
     else:
