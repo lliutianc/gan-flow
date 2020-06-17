@@ -130,4 +130,5 @@ dmypy.json
 
 /_archive
 
-#/ffjord
+#model_plot.py
+#wgan_plot.py

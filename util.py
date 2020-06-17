@@ -50,7 +50,10 @@ def makedirs(*dirnames):
 def save_best_result_from_tune(best_model_dir, save_path):
     if os.path.exists(save_path):
         for net in os.listdir(best_model_dir):
-            shutil.copy(os.path.join(best_model_dir, net), os.path.join(save_path, net))
+            shutil.copy(
+                os.path.join(
+                    best_model_dir, net), os.path.join(
+                    save_path, net))
 
 
 def retrieve_best_result_from_tune(path):
