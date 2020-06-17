@@ -20,6 +20,8 @@ Some important dependencies:
 
 `requirements.txt` contains the full list.
 
+Our experiments of [FFJORD](https://github.com/rtqichen/ffjord) and [Gaussianization Flows](https://github.com/chenlin9/Gaussianization_Flows) are based on existed repos, more detailed requirements can be found there.
+
 ## Usage
 
 Different scripts are provided for different models. The dataset: unimodal/multimodal can be specified with args `gu_num`. Details of `args` are provided within the script. Only some important args are explained here. We use 50,000 iterations and batch size 2,048 by default.
@@ -61,7 +63,7 @@ Gaussianization flows:
 
 #### Trained models
 
-Trained models are in **model_results** and **wgan_results** in `pth` and can be loaded by `torch.load(model_path, map_location=device)` without network instance. However, in order to use WGAN, corresponding configs are still needed to specify the prior distribution and dimension. All *best* configs of WGAN can be found in `wgan_best_configs.py`. 
+Trained models are inluded in **model_results** and **wgan_results** dictories with `.pth` format which can be loaded by `torch.load(model_path, map_location=device)` directly without network instance. However, in order to use WGAN to generate new samples, corresponding configs are still needed to specify the prior distribution and dimension. All these *best* configs of WGAN can be found in `wgan_best_configs.py`. 
 
 `model_plot.py` and `wgan_plot.py` can directly used to plot the trained distribution by
 
