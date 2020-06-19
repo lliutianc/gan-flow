@@ -1,4 +1,4 @@
-Implementations and results for Flows Succeed Where GANs Fail: Lessons from Low-Dimensional Data.
+Implementations and results for [Flows Succeed Where GANs Fail: Lessons from Low-Dimensional Data.](https://arxiv.org/abs/2006.10175)
 
 ## Abstract
 
