@@ -24,7 +24,7 @@ Our experiments of [FFJORD](https://github.com/rtqichen/ffjord) and [Gaussianiza
 
 ## Usage
 
-Different scripts are provided for different models. The dataset: unimodal/multimodal can be specified with args `gu_num`. Details of `args` are provided within the script. Only some important args are explained here. We use 50,000 iterations and batch size 2,048 by default.
+Different scripts are provided for different models. The dataset: unimodal/multimodal can be specified by args `--gu_num` and the number of GPU to use can be specified by args `--gpu`. Further details of `args` are provided within the script. Only some important args are explained here. We use 50,000 iterations and batch size 2,048 by default.
 
 #### Unimodal Dataset:
 
