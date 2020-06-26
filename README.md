@@ -65,7 +65,7 @@ Gaussianization flows:
 
 Trained models are included in **model_results** and **wgan_results** folds with `.pth` format which can be loaded by `torch.load(model_path, map_location=device)` directly without network instance. However, in order to use WGAN to generate new samples, corresponding configs are still needed to specify the prior distribution and dimension. All these *best* configs of WGAN can be found in `wgan_best_configs.py`. 
 
-`model_plot.py` and `wgan_plot.py` can directly used to plot the trained distribution by
+`model_plot.py` and `wgan_plot.py` can be directly used to plot the trained distribution by
 
 `python3 -m model_plot` 
 
