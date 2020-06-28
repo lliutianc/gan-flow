@@ -154,13 +154,13 @@ def plot_separately(
 
     model_path = os.path.join(curPath, 'wgan_results', data)
 
-    real = dataloader.get_sample(eval_size)
-    real_sample = real.cpu().data.numpy().squeeze()
+    # real = dataloader.get_sample(eval_size)
+    # real_sample = real.cpu().data.numpy().squeeze()
 
     plt.cla()
     fig, axes = plt.subplots(
         figsize=(
-            FIG_W, FIG_H * len(labels) + 1), nrows=len(labels) + 1, ncols=1)
+            FIG_W, FIG_H * len(labels)), nrows=len(labels), ncols=1)
     ax = axes[0]
     ax.set_title(f'({labels[0]})', fontsize=FONTSIZE * 1.5)
 
@@ -260,6 +260,9 @@ def plot_separately(
 
             print(
                 f'Parameters number: generator: {count_parameters(generator)}, critic: {count_parameters(critic)}')
+
+        generator.eval()
+        critic.eval()
 
         prior = torch.randn if config['prior'] == 'uniform' else partial(
             torch.normal, mean=0., std=1.)
