@@ -528,6 +528,9 @@ class WGANTrainer (tune.Trainable):
         self.critic.load_state_dict(torch.load(critic_path))
 
     def _evaluate(self, display, niter):
+        self.generator.eval()
+        self.critic.eval()
+
         with torch.no_grad():
             real = self.dataloader.get_sample(self.config['eval_size'])
             prior = self.prior(

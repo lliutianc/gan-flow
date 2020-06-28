@@ -67,13 +67,17 @@ def plot_separately(
     gaussianization_flow = torch.load(
         model_path + '/gaussianzation_flow.pth',
         map_location=device)
+    gaussianization_flow.eval()
 
     # Load ffjord
     ffjord = torch.load(model_path + '/ffjord.pth', map_location=device)
+    ffjord.eval()
 
     # Load wgan
     generator = torch.load(model_path + '/generator.pth', map_location=device)
     critic = torch.load(model_path + '/critic.pth', map_location=device)
+    generator.eval()
+    critic.eval()
 
     # gaussianization_flow
     args = gaus_flow_parser.parse_args()
