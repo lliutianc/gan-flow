@@ -17,6 +17,7 @@ Some important dependencies:
 - Seaborn
 - Matplotlib
 - Raytune
+- statsmodels (This package is necessary for Seaborn to use KDE bandwidth correctly.)
 
 `requirements.txt` contains the full list.
 
