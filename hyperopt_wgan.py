@@ -323,7 +323,7 @@ class Critic (nn.Module):
                                           spect_norm,
                                           norm)]
             else:
-                modules += [
+                modules += [activation,
                     spectral_norm(
                         nn.Linear(
                             hidden_size,
