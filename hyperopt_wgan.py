@@ -5,7 +5,8 @@ from functools import partial
 import time
 
 import matplotlib.pyplot as plt
-import seaborn.apionly as sns
+# import seaborn.apionly as sns
+import seaborn as sns
 
 import torch.nn as nn
 import torch.nn.utils.spectral_norm as spectral_norm
@@ -676,6 +677,8 @@ if __name__ == '__main__':
         if args.residual_block:
             # Set deeper depth of Resnet.
             config["n_hidden"] = tune.choice([1, 3, 5, 7])
+
+    config['device'] = args.device
 
     # save path
     search_type = 'automatic' if args.auto else 'manual'
