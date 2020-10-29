@@ -165,12 +165,14 @@ parser.add_argument(
 parser.add_argument(
     '--eval_est',
     action='store_true',
+    default=False,
     help='use w_distance_estimated to choose best model.')
 parser.add_argument(
     '--log_interval',
     type=int,
     default=1000,
     help='How often to show loss statistics and save models/samples.')
+
 
 config = {  # 'prior': tune.choice(['uniform', 'gaussian']),
     'prior_size': tune.choice([1, 3, 5]), 'hidden_size': tune.choice([64, 128, 256]),
@@ -631,6 +633,8 @@ class WGANTrainer (tune.Trainable):
 if __name__ == '__main__':
     args = parser.parse_args()
     args.spect_norm = not args.no_spectral_norm
+    args.eval_real = not args.eval_est
+
     if args.auto or args.auto_full:
         args.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
