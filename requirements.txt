@@ -5,7 +5,7 @@ brewer2mpl==1.4.1
 h5py==2.10.0
 hyperopt==0.2.4
 matplotlib==3.2.1
-numpy==1.21.0
+numpy==1.22.0
 pandas==1.0.4
 Pillow==9.0.1
 ray==0.8.5
