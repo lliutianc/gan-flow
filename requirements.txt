@@ -7,7 +7,7 @@ hyperopt==0.2.4
 matplotlib==3.2.1
 numpy==1.22.0
 pandas==1.0.4
-Pillow==9.0.1
+Pillow==9.3.0
 ray==0.8.5
 scikit_learn==0.23.1
 scipy==1.4.1
